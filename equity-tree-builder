@@ -1,0 +1,3 @@
+#!/bin/bash
+# equity-tree-builder CLI wrapper
+python3 "$(dirname "$0")/equity_tree_builder.py" "$@"
