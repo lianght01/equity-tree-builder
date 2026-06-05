@@ -496,11 +496,18 @@ class EquityTreeApp:
         self.clean_status_var = tk.BooleanVar(value=True)
         self.output_dir = tk.StringVar(value=os.path.expanduser("~/Desktop"))
         
-        # Platform font: use system default on macOS, Microsoft YaHei on Windows
-        self.FONT = ('Microsoft YaHei', 10) if sys.platform == 'win32' else (None, 11)
-        self.FONT_BOLD = ('Microsoft YaHei', 10, 'bold') if sys.platform == 'win32' else (None, 11, 'bold')
-        self.FONT_SM = ('Microsoft YaHei', 9) if sys.platform == 'win32' else (None, 10)
-        self.FONT_LG = ('Microsoft YaHei', 13, 'bold') if sys.platform == 'win32' else (None, 14, 'bold')
+        # Platform font
+        if sys.platform == 'win32':
+            self.FONT = ('Microsoft YaHei', 10)
+            self.FONT_BOLD = ('Microsoft YaHei', 10, 'bold')
+            self.FONT_SM = ('Microsoft YaHei', 9)
+            self.FONT_LG = ('Microsoft YaHei', 13, 'bold')
+        else:
+            # macOS - use system fonts
+            self.FONT = ('Helvetica Neue', 12)
+            self.FONT_BOLD = ('Helvetica Neue', 12, 'bold')
+            self.FONT_SM = ('Helvetica Neue', 11)
+            self.FONT_LG = ('Helvetica Neue', 15, 'bold')
         
         self._build_ui()
     
@@ -513,7 +520,7 @@ class EquityTreeApp:
         title_frame.pack(fill=tk.X, padx=18, pady=(14, 2))
         tk.Label(title_frame, text="股权架构树生成器", font=self.FONT_LG,
                 fg='').pack(anchor=tk.W)
-        tk.Label(title_frame, text="从Excel数据生成交互式股权架构树HTML", 
+        tk.Label(title_frame, text="导入Excel数据 → 一键生成交互式股权架构树HTML", 
                 font=self.FONT_SM, fg='gray').pack(anchor=tk.W, pady=(2, 0))
         
         ttk.Separator(root, orient=tk.HORIZONTAL).pack(fill=tk.X, padx=14, pady=(10, 6))
@@ -608,12 +615,7 @@ class EquityTreeApp:
         self.log_text.pack(fill=tk.BOTH, expand=True)
     
     def _update_mode_style(self):
-        val = self.mode_var.get()
-        for rb in self._mode_buttons:
-            if rb.cget('value') == val:
-                rb.configure(bg='#1a73e8', fg='white')
-            else:
-                rb.configure(bg='#f1f3f4', fg='#202124')
+        pass
     
     def _sel_data(self):
         path = filedialog.askopenfilename(title="选择数据文件", 
