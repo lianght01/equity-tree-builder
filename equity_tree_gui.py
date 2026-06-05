@@ -560,14 +560,14 @@ class EquityTreeApp:
         header.pack(fill=tk.X)
         header.pack_propagate(False)
         
-        tk.Label(header, text="🌳  股权架构树生成器", 
+        tk.Label(header, text="股权架构树生成器", 
                 font=("Microsoft YaHei", 20, "bold"), 
-                bg='#1a73e8', fg='white').place(x=24, y=14)
+                bg='#1a73e8', fg='white').place(x=20, y=14)
         tk.Label(header, text="从Excel数据一键生成交互式股权架构树HTML", 
                 font=("Microsoft YaHei", 10), 
-                bg='#1a73e8', fg='rgba(255,255,255,0.8)').place(x=24, y=48)
+                bg='#1a73e8', fg='#e0e0e0').place(x=20, y=48)
         
-        # ── Main Content Area (scrollable form) ──
+        # ── Main Content Area ──
         body = tk.Frame(root, bg=self.C['bg'])
         body.pack(fill=tk.BOTH, expand=True, padx=20, pady=16)
         
@@ -581,22 +581,23 @@ class EquityTreeApp:
         
         # Data file
         c1, _ = self._make_row(card1, "数据文件")
-        self.data_entry = tk.Entry(c1, textvariable=self.data_path,
-                         font=("Microsoft YaHei", 10), bg='#f8f9fa',
-                         relief=tk.FLAT, highlightthickness=1,
-                         highlightcolor=self.C['border'],
-                         highlightbackground=self.C['border'])
-        self.data_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, ipady=3)
-        self._make_btn(c1, "📂 浏览", self._sel_data, 'outline').pack(side=tk.LEFT, padx=(6,0))
+        tk.Entry(c1, textvariable=self.data_path,
+                font=("Microsoft YaHei", 10), bg='#f8f9fa',
+                relief=tk.FLAT, bd=0).pack(side=tk.LEFT, fill=tk.X, expand=True, ipady=3)
+        tk.Button(c1, text="浏览", command=self._sel_data,
+                 bg='#ffffff', fg='#1a73e8', font=("Microsoft YaHei", 10),
+                 padx=10, pady=2, cursor="hand2", bd=1, relief=tk.GROOVE,
+                 activebackground='#e8f0fe').pack(side=tk.LEFT, padx=(6,0))
         
         # Biz file
         c2, _ = self._make_row(card1, "客户数据")
         tk.Entry(c2, textvariable=self.biz_path,
                 font=("Microsoft YaHei", 10), bg='#f8f9fa',
-                relief=tk.FLAT, highlightthickness=1,
-                highlightcolor=self.C['border'],
-                highlightbackground=self.C['border']).pack(side=tk.LEFT, fill=tk.X, expand=True, ipady=3)
-        self._make_btn(c2, "📂 浏览", self._sel_biz, 'outline').pack(side=tk.LEFT, padx=(6,0))
+                relief=tk.FLAT, bd=0).pack(side=tk.LEFT, fill=tk.X, expand=True, ipady=3)
+        tk.Button(c2, text="浏览", command=self._sel_biz,
+                 bg='#ffffff', fg='#1a73e8', font=("Microsoft YaHei", 10),
+                 padx=10, pady=2, cursor="hand2", bd=1, relief=tk.GROOVE,
+                 activebackground='#e8f0fe').pack(side=tk.LEFT, padx=(6,0))
         tk.Label(c2, text="可选", font=("Microsoft YaHei", 9), bg='#ffffff', fg=self.C['text_sec']).pack(side=tk.LEFT, padx=4)
         
         # ── Card: 参数设置 ──
@@ -611,107 +612,106 @@ class EquityTreeApp:
         c3, _ = self._make_row(card2, "HTML标题")
         tk.Entry(c3, textvariable=self.title_var,
                 font=("Microsoft YaHei", 10), bg='#f8f9fa',
-                relief=tk.FLAT, highlightthickness=1,
-                highlightcolor=self.C['border'],
-                highlightbackground=self.C['border']).pack(side=tk.LEFT, fill=tk.X, expand=True, ipady=3)
+                relief=tk.FLAT, bd=0).pack(side=tk.LEFT, fill=tk.X, expand=True, ipady=3)
         
         # Root node
         c4, _ = self._make_row(card2, "指定根节点")
         tk.Entry(c4, textvariable=self.root_var,
                 font=("Microsoft YaHei", 10), bg='#f8f9fa',
-                relief=tk.FLAT, highlightthickness=1,
-                highlightcolor=self.C['border'],
-                highlightbackground=self.C['border']).pack(side=tk.LEFT, fill=tk.X, expand=True, ipady=3)
+                relief=tk.FLAT, bd=0).pack(side=tk.LEFT, fill=tk.X, expand=True, ipady=3)
         tk.Label(c4, text="留空自动识别", font=("Microsoft YaHei", 9), bg='#ffffff', fg=self.C['text_sec']).pack(side=tk.LEFT, padx=4)
         
         # Output
         c5, _ = self._make_row(card2, "输出位置")
         tk.Entry(c5, textvariable=self.output_dir,
                 font=("Microsoft YaHei", 10), bg='#f8f9fa',
-                relief=tk.FLAT, highlightthickness=1,
-                highlightcolor=self.C['border'],
-                highlightbackground=self.C['border']).pack(side=tk.LEFT, fill=tk.X, expand=True, ipady=3)
-        self._make_btn(c5, "📁 选择", self._sel_dir, 'outline').pack(side=tk.LEFT, padx=(6,0))
+                relief=tk.FLAT, bd=0).pack(side=tk.LEFT, fill=tk.X, expand=True, ipady=3)
+        tk.Button(c5, text="选择", command=self._sel_dir,
+                 bg='#ffffff', fg='#1a73e8', font=("Microsoft YaHei", 10),
+                 padx=10, pady=2, cursor="hand2", bd=1, relief=tk.GROOVE,
+                 activebackground='#e8f0fe').pack(side=tk.LEFT, padx=(6,0))
         
         # ── Card: 构建选项 ──
         card3 = self._make_card(body)
         card3.pack(fill=tk.X, pady=(0, 12))
         
-        # Mode + template on same line inside a flex row
         opt_row = tk.Frame(card3, bg='#ffffff')
         opt_row.pack(fill=tk.X, padx=16, pady=(10, 4))
         
-        # Left side: mode selector
+        # Mode selector
         mode_frame = tk.Frame(opt_row, bg='#ffffff')
         mode_frame.pack(side=tk.LEFT)
         tk.Label(mode_frame, text="构建模式:", font=("Microsoft YaHei", 10, "bold"),
                 bg='#ffffff', fg=self.C['text']).pack(side=tk.LEFT)
         
+        self._mode_buttons = []
         for txt, val in [("控制权树", "control"), ("投资穿透树", "invest")]:
             rb = tk.Radiobutton(mode_frame, text=txt, variable=self.mode_var, value=val,
                               font=("Microsoft YaHei", 10), bg='#ffffff',
                               activebackground='#ffffff',
-                              selectcolor='#ffffff', indicatoron=0,
-                              padx=12, pady=2, cursor="hand2")
+                              indicatoron=0, padx=12, pady=2, cursor="hand2")
             rb.pack(side=tk.LEFT, padx=(6, 0))
-            # Style: selected vs unselected
-            def upd_rb():
-                for w in mode_frame.winfo_children():
-                    if isinstance(w, tk.Radiobutton):
-                        if w.cget('value') == self.mode_var.get():
-                            w.configure(bg=self.C['primary'], fg='white')
-                        else:
-                            w.configure(bg='#f1f3f4', fg=self.C['text'])
-            self.mode_var.trace_add('write', lambda *a: upd_rb())
-            rb.bind("<ButtonRelease-1>", lambda e: upd_rb())
-        upd_rb()
+            self._mode_buttons.append(rb)
         
-        # Right side: template + clean check
+        self._update_mode_style()
+        self.mode_var.trace_add('write', lambda *a: self._update_mode_style())
+        
+        # Right side
         right_frame = tk.Frame(opt_row, bg='#ffffff')
         right_frame.pack(side=tk.RIGHT)
         
-        self.tpl_btn = self._make_btn(right_frame, "📋 模板", self._gen_template, 'outline')
-        self.tpl_btn.pack(side=tk.LEFT)
+        tk.Button(right_frame, text="模板", command=self._gen_template,
+                 bg='#ffffff', fg='#1a73e8', font=("Microsoft YaHei", 10),
+                 padx=10, pady=2, cursor="hand2", bd=1, relief=tk.GROOVE,
+                 activebackground='#e8f0fe').pack(side=tk.LEFT)
         
-        tk.Checkbutton(right_frame, text="剔除异常企业", variable=self.clean_status_var,
+        tk.Checkbutton(right_frame, text="剔除异常", variable=self.clean_status_var,
                       font=("Microsoft YaHei", 9), bg='#ffffff',
-                      activebackground='#ffffff',
-                      selectcolor='#ffffff', fg=self.C['text_sec']).pack(side=tk.LEFT, padx=(10,0))
+                      activebackground='#ffffff', fg=self.C['text_sec']).pack(side=tk.LEFT, padx=(10,0))
         
-        # Hint below mode
+        # Hint
         hint_row = tk.Frame(card3, bg='#ffffff')
         hint_row.pack(fill=tk.X, padx=16, pady=(0, 10))
-        mode_hint = tk.Label(hint_row, text="控制权树=取最大股东追溯控制链   |   投资穿透树=从指定人出发展开展示",
-                           font=("Microsoft YaHei", 9), bg='#ffffff', fg=self.C['text_sec'])
-        mode_hint.pack(side=tk.LEFT)
+        tk.Label(hint_row, text="控制权树=取最大股东追控制链 | 投资穿透树=从指定人展开",
+                font=("Microsoft YaHei", 9), bg='#ffffff', fg=self.C['text_sec']).pack(side=tk.LEFT)
         
         # ── Generate Button ──
         btn_frame = tk.Frame(body, bg=self.C['bg'])
         btn_frame.pack(fill=tk.X, pady=(4, 0))
         
-        self.gen_btn = self._make_btn(btn_frame, "🚀  生成股权树HTML", self._generate, 'primary')
+        self.gen_btn = tk.Button(btn_frame, text="生成股权树HTML", command=self._generate,
+                               bg='#1a73e8', fg='white', font=("Microsoft YaHei", 11, "bold"),
+                               padx=20, pady=6, cursor="hand2", bd=0, relief=tk.FLAT,
+                               activebackground='#1557b0', activeforeground='white')
         self.gen_btn.pack(side=tk.LEFT, padx=(0, 8))
         
-        self.open_btn = self._make_btn(btn_frame, "📂 打开文件", self._open_output, 'outline')
-        self.open_btn.configure(state=tk.DISABLED)
+        self.open_btn = tk.Button(btn_frame, text="打开文件", command=self._open_output,
+                                bg='#ffffff', fg='#1a73e8', font=("Microsoft YaHei", 10),
+                                padx=14, pady=4, cursor="hand2", bd=1, relief=tk.GROOVE,
+                                activebackground='#e8f0fe', state=tk.DISABLED)
         self.open_btn.pack(side=tk.LEFT)
         
         # ── Log Area ──
-        log_frame = tk.Frame(body, bg='#ffffff', bd=0, relief=tk.FLAT,
-                            highlightthickness=1, highlightcolor=self.C['border'],
-                            highlightbackground=self.C['border'])
+        log_frame = tk.Frame(body, bg='#ffffff', bd=1, relief=tk.GROOVE)
         log_frame.pack(fill=tk.BOTH, expand=True, pady=(8, 0))
         
         self.log_text = tk.Text(log_frame, height=6,
                                font=("Consolas", 10),
                                wrap=tk.WORD, state=tk.DISABLED,
                                bg='#fafafa', fg=self.C['text'],
-                               relief=tk.FLAT, padx=12, pady=8,
-                               border=0)
+                               relief=tk.FLAT, padx=12, pady=8, bd=0)
         scroll = tk.Scrollbar(log_frame, command=self.log_text.yview, width=10, bd=0)
         self.log_text.configure(yscrollcommand=scroll.set)
         scroll.pack(side=tk.RIGHT, fill=tk.Y)
         self.log_text.pack(fill=tk.BOTH, expand=True)
+    
+    def _update_mode_style(self):
+        val = self.mode_var.get()
+        for rb in self._mode_buttons:
+            if rb.cget('value') == val:
+                rb.configure(bg='#1a73e8', fg='white')
+            else:
+                rb.configure(bg='#f1f3f4', fg='#202124')
     
     def _sel_data(self):
         path = filedialog.askopenfilename(title="选择数据文件", 
