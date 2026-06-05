@@ -104,47 +104,163 @@ def parse_sheet(rows):
     print(f"  Parsed: {len(result)} records")
     return result
 
-def build_tree(rows):
-    relations = []
-    node_map = {}
+def build_tree(rows, root_name=None, mode='control'):
+    """
+    从股东关系表构建树。
+    
+    mode='control': 控制权树 - 每家子公司取持股比例最高的股东作为父节点
+    mode='invest':  投资穿透树 - 从根节点出发，包含该节点投资的所有企业，
+                     对每个被投企业再取最大股东穿透其下级
+    """
+    # First pass: build all relationships
+    all_rels = []  # (child, parent, ratio)
+    node_info = {}
+    
     for r in rows:
         name = r.get('name', '').strip()
         parent = r.get('parent', '').strip()
         if not name:
             continue
-        node_map[name] = {
-            'status': r.get('status', ''),
-            'ratio': r.get('ratio', ''),
-        }
+        if name not in node_info:
+            node_info[name] = {'status': r.get('status', ''), 'ratio': ''}
         if parent:
-            relations.append({'name': name, 'parent': parent, 'ratio': r.get('ratio', '')})
+            all_rels.append((name, parent, r.get('ratio', '')))
     
-    all_parents = set(r['parent'] for r in relations)
-    all_children = set(r['name'] for r in relations)
-    roots = list(all_parents - all_children)
-    if not roots:
-        roots = [max(relations, key=lambda r: r['name'] in all_parents)['parent']] if relations else []
-    if not roots:
-        return {'name': rows[0]['name'], 'ratio': '', 'status': '', 'children': []}
+    if mode == 'invest' and root_name:
+        return _build_invest_tree(root_name, all_rels, node_info)
+    else:
+        return _build_control_tree(all_rels, node_info, root_name)
+
+
+def _build_control_tree(all_rels, node_info, root_name=None):
+    """控制权树: 取持股比例最高的股东作为父节点"""
+    best_parent = {}
+    for child, parent, ratio in all_rels:
+        if child not in best_parent:
+            best_parent[child] = (parent, ratio)
+        else:
+            try:
+                cur = float(best_parent[child][1]) if best_parent[child][1] else 0
+                new = float(ratio) if ratio else 0
+                if new > cur:
+                    best_parent[child] = (parent, ratio)
+            except ValueError:
+                pass
     
     children_map = {}
-    for rel in relations:
-        p = rel['parent']
-        if p not in children_map:
-            children_map[p] = []
-        children_map[p].append({'name': rel['name'], 'ratio': str(rel.get('ratio', ''))})
+    for child, (parent, ratio) in best_parent.items():
+        children_map.setdefault(parent, []).append((child, ratio))
+    for p in children_map:
+        children_map[p].sort(key=lambda x: float(x[1]) if x[1] else 0, reverse=True)
+    
+    # Find root
+    all_ps = set(p for p, _ in best_parent.values())
+    all_cs = set(best_parent.keys())
+    candidates = list(all_ps - all_cs)
+    known = [c for c in candidates if c in node_info]
+    
+    if root_name:
+        roots = [root_name]
+    elif known:
+        known.sort(key=lambda n: len(children_map.get(n, [])), reverse=True)
+        roots = [known[0]]
+    else:
+        roots = candidates[:1] if candidates else (list(children_map.keys())[:1] if children_map else [])
+    
+    if not roots:
+        return {'name': all_rels[0][0] if all_rels else '', 'ratio': '', 'status': '', 'children': []}
+    
+    return _build_subtree(roots[0], children_map, node_info)
+
+
+def _build_invest_tree(root_name, all_rels, node_info):
+    """投资穿透树: 从根节点出发→其投资的企业→这些企业的最大股东下级"""
+    # Step 1: Find ALL companies that root_name invests in (any ratio)
+    root_children = set()
+    for child, parent, ratio in all_rels:
+        if parent == root_name:
+            root_children.add(child)
+    
+    # Step 2: For each of those companies, trace their control chain (max parent)
+    best_parent = {}
+    for child, parent, ratio in all_rels:
+        if child not in best_parent:
+            best_parent[child] = (parent, ratio)
+        else:
+            try:
+                cur = float(best_parent[child][1]) if best_parent[child][1] else 0
+                new = float(ratio) if ratio else 0
+                if new > cur:
+                    best_parent[child] = (parent, ratio)
+            except ValueError:
+                pass
+    
+    # Step 3: Build children_map ONLY for paths descending from root_children
+    children_map = {}
+    for child, (parent, ratio) in best_parent.items():
+        children_map.setdefault(parent, []).append((child, ratio))
+    for p in children_map:
+        children_map[p].sort(key=lambda x: float(x[1]) if x[1] else 0, reverse=True)
+    
+    # Step 4: Build the tree
+    # Root node
+    root = {
+        'name': root_name,
+        'ratio': '',
+        'status': '个人' if not node_info.get(root_name, {}).get('status') else node_info[root_name]['status'],
+        'children': []
+    }
+    
+    visited = set([root_name])
     
     def build_subtree(name):
-        info = node_map.get(name, {})
-        node = {'name': name, 'ratio': info.get('ratio', ''), 'status': info.get('status', ''), 'children': []}
-        for child in children_map.get(name, []):
-            cn = build_subtree(child['name'])
-            if child.get('ratio', ''):
-                cn['ratio'] = child['ratio']
-            node['children'].append(cn)
+        if name in visited:
+            return None
+        visited.add(name)
+        info = node_info.get(name, {})
+        node = {
+            'name': name,
+            'ratio': '',
+            'status': info.get('status', ''),
+            'children': []
+        }
+        for child_name, ratio in children_map.get(name, []):
+            cn = build_subtree(child_name)
+            if cn:
+                if ratio:
+                    cn['ratio'] = ratio
+                node['children'].append(cn)
+        visited.discard(name)
         return node
     
-    return build_subtree(roots[0])
+    for child in root_children:
+        cn = build_subtree(child)
+        if cn:
+            root['children'].append(cn)
+    
+    return root
+
+
+def _build_subtree(name, children_map, node_info, visited=None):
+    if visited is None:
+        visited = set()
+    if name in visited:
+        return {'name': name, 'ratio': '', 'status': '(循环)', 'children': []}
+    visited.add(name)
+    info = node_info.get(name, {})
+    node = {
+        'name': name,
+        'ratio': info.get('ratio', ''),
+        'status': info.get('status', ''),
+        'children': []
+    }
+    for child_name, ratio in children_map.get(name, []):
+        cn = _build_subtree(child_name, children_map, node_info, visited)
+        if ratio:
+            cn['ratio'] = ratio
+        node['children'].append(cn)
+    visited.discard(name)
+    return node
 
 def count_nodes(n):
     c = 1
@@ -324,6 +440,8 @@ class EquityTreeApp:
         self.data_path = tk.StringVar()
         self.biz_path = tk.StringVar()
         self.title_var = tk.StringVar(value="股权关系树")
+        self.root_var = tk.StringVar()
+        self.mode_var = tk.StringVar(value="control")
         self.output_dir = tk.StringVar(value=os.path.expanduser("~/Desktop"))
         
         # Build UI
@@ -358,6 +476,13 @@ class EquityTreeApp:
         tk.Label(f3, text="HTML标题", width=18, anchor=tk.W).pack(side=tk.LEFT)
         tk.Entry(f3, textvariable=self.title_var, width=40).pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
         
+        # Root node (optional)
+        fr = ttk.Frame(main)
+        fr.pack(fill=tk.X, pady=2)
+        tk.Label(fr, text="指定根节点", width=18, anchor=tk.W).pack(side=tk.LEFT)
+        tk.Entry(fr, textvariable=self.root_var, width=40).pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
+        tk.Label(fr, text="留空自动识别", font=("Microsoft YaHei", 9), fg="#888").pack(side=tk.LEFT, padx=2)
+        
         # Template button row
         ft = ttk.Frame(main)
         ft.pack(fill=tk.X, pady=2)
@@ -368,6 +493,16 @@ class EquityTreeApp:
                                 activebackground="#eaeef2")
         self.tpl_btn.pack(side=tk.LEFT)
         tk.Label(ft, text="先填模板再导入", font=("Microsoft YaHei", 9), fg="#888").pack(side=tk.LEFT, padx=8)
+        
+        # Mode selector
+        fm = ttk.Frame(main)
+        fm.pack(fill=tk.X, pady=3)
+        tk.Label(fm, text="构建模式", width=18, anchor=tk.W).pack(side=tk.LEFT)
+        tk.Radiobutton(fm, text="控制权树（默认）", variable=self.mode_var, value="control",
+                       font=("Microsoft YaHei", 10)).pack(side=tk.LEFT, padx=2)
+        tk.Radiobutton(fm, text="投资穿透树", variable=self.mode_var, value="invest",
+                       font=("Microsoft YaHei", 10)).pack(side=tk.LEFT, padx=2)
+        tk.Label(fm, text="投资穿透需指定根节点", font=("Microsoft YaHei", 9), fg="#888").pack(side=tk.LEFT, padx=5)
         
         # Output
         f4 = ttk.Frame(main)
@@ -537,7 +672,14 @@ class EquityTreeApp:
                     return
                 
                 self._log(f"✅ 解析完成: {len(data_rows)} 条记录")
-                tree = build_tree(data_rows)
+                root_name = self.root_var.get().strip() or None
+                mode = self.mode_var.get()
+                mode_label = {'control':'控制权树','invest':'投资穿透树'}.get(mode, mode)
+                tree = build_tree(data_rows, root_name, mode)
+                if root_name:
+                    self._log(f"  模式: {mode_label}，根节点: {root_name}")
+                else:
+                    self._log(f"  模式: {mode_label}，根节点: {tree['name']}（自动识别）")
                 self._log(f"✅ 树构建完成: {count_nodes(tree)} 个节点")
             
             # Clean
