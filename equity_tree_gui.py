@@ -335,8 +335,8 @@ def load_biz_data(biz_rows, tree):
             match(c)
     match(tree)
     return tree, matched
-
 def clean_tree(tree):
+    """基本清洗：去除空ratio的一级节点（疑似误入）"""
     if 'children' in tree:
         kept = []
         for c in tree['children']:
@@ -347,6 +347,36 @@ def clean_tree(tree):
             kept.append(c)
         tree['children'] = kept
     return tree
+
+def clean_status(tree):
+    """剔除经营状态异常的节点（注销/吊销/等），保留存续和在营"""
+    bad_keywords = ['注销','吊销','已告解散','清算','停业','迁出','撤销','关闭']
+    removed = []
+    
+    def walk(node, parent=None, idx=None):
+        if not node.get('children'):
+            return
+        kept = []
+        for i, c in enumerate(node['children']):
+            st = c.get('status', '').strip()
+            is_bad = False
+            if st:
+                for kw in bad_keywords:
+                    if kw in st:
+                        is_bad = True
+                        break
+            if is_bad:
+                removed.append(c['name'])
+                # But keep it if it has children (intermediate node)
+                if c.get('children') and len(c['children']) > 0:
+                    kept.append(c)
+            else:
+                walk(c)
+                kept.append(c)
+        node['children'] = kept
+    
+    walk(tree)
+    return removed
 
 def generate_html(tree, title, output_path, log_func=print):
     tree_json = json.dumps(tree, ensure_ascii=False, separators=(',', ':'))
@@ -442,6 +472,7 @@ class EquityTreeApp:
         self.title_var = tk.StringVar(value="股权关系树")
         self.root_var = tk.StringVar()
         self.mode_var = tk.StringVar(value="control")
+        self.clean_status_var = tk.BooleanVar(value=True)
         self.output_dir = tk.StringVar(value=os.path.expanduser("~/Desktop"))
         
         # Build UI
@@ -503,6 +534,8 @@ class EquityTreeApp:
         tk.Radiobutton(fm, text="投资穿透树", variable=self.mode_var, value="invest",
                        font=("Microsoft YaHei", 10)).pack(side=tk.LEFT, padx=2)
         tk.Label(fm, text="投资穿透需指定根节点", font=("Microsoft YaHei", 9), fg="#888").pack(side=tk.LEFT, padx=5)
+        tk.Checkbutton(fm, text="剔除注销/吊销企业", variable=self.clean_status_var,
+                       font=("Microsoft YaHei", 10)).pack(side=tk.LEFT, padx=10)
         
         # Output
         f4 = ttk.Frame(main)
@@ -682,7 +715,16 @@ class EquityTreeApp:
                     self._log(f"  模式: {mode_label}，根节点: {tree['name']}（自动识别）")
                 self._log(f"✅ 树构建完成: {count_nodes(tree)} 个节点")
             
-            # Clean
+            # Clean (status filter + empty ratio)
+            removed = []
+            if self.clean_status_var.get() and tree.get('children'):
+                r = clean_status(tree)
+                if r:
+                    self._log(f"🧹 剔除经营异常企业: {len(r)}家")
+                    for name in r[:10]:
+                        self._log(f"   ✗ {name}")
+                    if len(r) > 10:
+                        self._log(f"   ... 等{len(r)}家")
             tree = clean_tree(tree)
             self._log(f"🧹 清洗完成: {count_nodes(tree)} 个节点")
             
