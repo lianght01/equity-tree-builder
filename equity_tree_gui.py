@@ -349,31 +349,41 @@ def clean_tree(tree):
     return tree
 
 def clean_status(tree):
-    """剔除经营状态异常的节点（注销/吊销/等），保留存续和在营"""
-    bad_keywords = ['注销','吊销','已告解散','清算','停业','迁出','撤销','关闭']
+    """剔除经营状态异常节点，只保留状态为'存续'或'在营（开业）'的企业"""
+    bad_keywords = ['注销','吊销','已告解散','清算','停业','迁出','撤销','关闭','非正常户',
+                    '破产','除名','迁出','取消']
     removed = []
     
-    def walk(node, parent=None, idx=None):
+    def walk(node):
         if not node.get('children'):
             return
         kept = []
-        for i, c in enumerate(node['children']):
+        for c in node['children']:
             st = c.get('status', '').strip()
+            # Also check node's own status from record
             is_bad = False
             if st:
-                for kw in bad_keywords:
-                    if kw in st:
-                        is_bad = True
-                        break
+                if st == '存续' or st == '在营（开业）':
+                    is_bad = False
+                else:
+                    for kw in bad_keywords:
+                        if kw in st:
+                            is_bad = True
+                            break
             if is_bad:
                 removed.append(c['name'])
-                # But keep it if it has children (intermediate node)
-                if c.get('children') and len(c['children']) > 0:
-                    kept.append(c)
+                # Walk into its children just to log them too
+                if c.get('children'):
+                    _count_bad(c)
             else:
                 walk(c)
                 kept.append(c)
         node['children'] = kept
+    
+    def _count_bad(node):
+        for c in node.get('children', []):
+            removed.append('  ↳ ' + c['name'])
+            _count_bad(c)
     
     walk(tree)
     return removed
