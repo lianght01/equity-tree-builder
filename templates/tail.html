@@ -107,8 +107,66 @@ document.getElementById("zout").onclick=function(){svg.transition().duration(300
 document.getElementById("exp").onclick=function(){root.descendants().forEach(function(d){if(d._children){d.children=d._children;d._children=null}});upd()};
 document.getElementById("col").onclick=function(){root.descendants().forEach(function(d){if(d.depth>=1&&d.children){d._children=d.children;d.children=null}});upd()};
 document.getElementById("rst").onclick=function(){document.getElementById("pf").value=0;document.getElementById("pctInput").value=0;document.getElementById("pv").textContent="0%";if(showBizOnly){showBizOnly=false;var b=document.getElementById("bizToggle");b.style.background="#2b7a78";b.style.color="#fff";b.style.borderColor="#2b7a78";b.textContent="\U0001f3e6 \u4ec5\u663e\u6211\u884c\u5ba2\u6237 ("+bizCount+"\u5bb6)"}af(0);svg.transition().duration(500).call(zoom.transform,it)};
-document.getElementById("printBtn").onclick=function(){document.body.setAttribute("data-print-date",new Date().toLocaleDateString("zh-CN"));var se=new Set();root.descendants().forEach(function(d){if(d._children){se.add(d.data.name);d.children=d._children;d._children=null}});upd();setTimeout(function(){window.print();root.descendants().forEach(function(d){if(se.has(d.data.name)&&d.children){d._children=d.children;d.children=null}});upd()},300)};
-document.getElementById("printNoWmBtn").onclick=function(){var pwd=prompt("\u8bf7\u8f93\u5165\u5bc6\u7801\u4ee5\u6253\u5370\u65e0\u6c34\u5370\u7248\u672c:");if(pwd!=="lht2026"){alert("\u5bc6\u7801\u9519\u8bef\uff0c\u8bbf\u95ee\u88ab\u62d2\u7edd");return;}var wm=document.getElementById("watermark");wm.classList.add("hide-print");var se=new Set();root.descendants().forEach(function(d){if(d._children){se.add(d.data.name);d.children=d._children;d._children=null}});upd();setTimeout(function(){window.print();wm.classList.remove("hide-print");root.descendants().forEach(function(d){if(se.has(d.data.name)&&d.children){d._children=d.children;d.children=null}});upd()},300)};
+function smartPrint(noWatermark){
+  if(noWatermark){var pwd=prompt("请输入密码");if(pwd!=="lht2026"){alert("密码错误");return;}}
+  // Save expand state
+  var se=new Set();
+  root.descendants().forEach(function(d){if(d._children){se.add(d.data.name);d.children=d._children;d._children=null}});
+  upd();
+  
+  setTimeout(function(){
+    // Get the expanded tree bounding box from D3 layout
+    var ns=root.descendants();
+    var minX=Infinity,maxX=-Infinity,minY=Infinity,maxY=-Infinity;
+    ns.forEach(function(d){
+      if(d.x<minX)minX=d.x;if(d.x>maxX)maxX=d.x;
+      if(d.y<minY)minY=d.y;if(d.y>maxY)maxY=d.y;
+    });
+    var tw=maxX-minX+300,th=maxY-minY+200; // tree width/height in px
+    // A4 landscape printable area at 96dpi (~277x190mm → ~1047x718px)
+    var pw=1050,ph=720;
+    // Calculate pages needed
+    var cols=Math.max(1,Math.ceil(tw/pw));
+    var rows=Math.max(1,Math.ceil(th/ph));
+    var totalPages=cols*rows;
+    
+    // Auto-scale if tree fits in one page width
+    var scale=Math.min(1,pw/tw);
+    
+    // Set SVG dimensions to actual tree size
+    svgEl.style.position="static";
+    svgEl.style.width=tw+"px";
+    svgEl.style.height=th+"px";
+    svgEl.style.overflow="visible";
+    
+    // Apply the zoom transform to show all nodes
+    var cx=(minX+maxX)/2,cy=(minY+maxY)/2;
+    var tx=svgEl.clientWidth/2-cx*scale,ty=80-cy*scale;
+    svg.call(zoom.transform,d3.zoomIdentity.translate(tx,ty).scale(scale));
+    
+    // Update node count display
+    document.getElementById("nc").textContent=ns.length+"节点 · 打印"+totalPages+"页";
+    
+    // Handle watermark
+    if(noWatermark){document.getElementById("watermark").classList.add("hide-print");}
+    
+    setTimeout(function(){
+      window.print();
+      // Restore
+      document.getElementById("watermark").classList.remove("hide-print");
+      svgEl.style.position="fixed";
+      svgEl.style.width="100%";
+      svgEl.style.height="calc(100vh - 80px)";
+      document.getElementById("nc").textContent=ns.length+"节点";
+      root.descendants().forEach(function(d){if(se.has(d.data.name)&&d.children){d._children=d.children;d.children=null}});
+      upd();
+      it=d3.zoomIdentity.translate(svgEl.clientWidth/2-root.x*0.9,60).scale(0.9);
+      svg.call(zoom.transform,it);
+    },200);
+  },100);
+}
+document.getElementById("printBtn").onclick=function(){smartPrint(false)};
+document.getElementById("printNoWmBtn").onclick=function(){smartPrint(true)};
 document.getElementById("layoutToggle").onclick=function(){isVertical=!isVertical;var btn=document.getElementById("layoutToggle");if(isVertical){btn.textContent="📐 横版排列";btn.style.background="#fff";btn.style.color="#6f42c1"}else{btn.textContent="📐 竖版排列";btn.style.background="#6f42c1";btn.style.color="#fff"}upd();setTimeout(function(){var cw=svgEl.clientWidth,ch=svgEl.clientHeight;var s=Math.min(0.9,cw/(root.x*2||1)*0.8);svg.call(zoom.transform,d3.zoomIdentity.translate(cw/2-root.x*s,60).scale(s))},50)};
 
 // Search with arrow navigation
