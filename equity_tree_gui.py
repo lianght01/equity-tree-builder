@@ -15,27 +15,36 @@ TEMPLATE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'templat
 # For PyInstaller bundled mode
 if hasattr(sys, '_MEIPASS'):
     TEMPLATE_DIR = os.path.join(sys._MEIPASS, 'templates')
-
 def find_header(col):
     h = str(col).strip().lower()
     aliases = {
-        'name': ['企业名称', '公司名称', '公司名', '名称', 'entity_name', 'company'],
-        'parent': ['上级企业名称', '上级企业', '母公司', '股东名称', '股东', '母公司名称', 'parent_name', 'parent'],
+        'parent': ['上级企业名称', '上级企业', '上级公司', '母公司', '股东名称', '母公司名称', '股东', 'parent_name', 'parent', '控股方'],
+        'name': ['企业名称', '公司名称', '公司名', 'entity_name', 'company'],
         'ratio': ['持股比例', '投资比例', '股权比例', 'ratio', 'invest_ratio'],
-        'status': ['经营状态', '状态', 'status', 'reg_status'],
+        'status': ['经营状态', '登记状态', '状态', 'status', 'reg_status'],
+        'level': ['层级', '级别', 'level', 'depth'],
         'biz_open': ['开户日期', '开户时间', '开户日', 'open_date', 'openDate'],
         'biz_deposit_avg': ['日均存款', '日均', 'deposit_avg', 'depositAvg'],
         'biz_deposit_spot': ['时点存款', '时点', 'deposit_spot', 'depositSpot'],
         'biz_loan': ['授信余额', '贷款余额', '授信', 'loan_balance', 'loanBalance'],
-        'biz_income': ['年化收入', '净收入', '年收入', 'net_income', 'netIncome12m'],
+        'biz_income': ['年化收入', '净收入', '净经营收入', '年收入', 'net_income', 'netIncome12m'],
         'biz_scale': ['规模', '企业规模', 'scale'],
         'biz_manager': ['客户经理', '经理', '管户', 'manager'],
     }
+    # Score each match: prefer longer and more specific
+    best_key, best_score = None, 0
     for key, names in aliases.items():
         for n in names:
-            if n.lower() in h or h in n.lower():
-                return key
-    return None
+            nl = n.lower()
+            # Exact match (highest priority)
+            if h == nl:
+                return key  # instant match
+            # Alias is a substring of header (e.g. '名称' in '企业名称')
+            if nl in h:
+                score = len(nl)
+                if score > best_score:
+                    best_key, best_score = key, score
+    return best_key
 
 def load_xlsx(path):
     import openpyxl
