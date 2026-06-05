@@ -779,11 +779,15 @@ class EquityTreeApp:
             messagebox.showerror("错误", f"生成模板失败:\n{e}")
     
     def _log(self, msg):
+        """Thread-safe log: schedule GUI update on main thread"""
+        self.root.after(0, self._append_log, msg)
+    
+    def _append_log(self, msg):
+        """Must be called from main thread only"""
         self.log_text.configure(state=tk.NORMAL)
         self.log_text.insert(tk.END, msg + "\n")
         self.log_text.see(tk.END)
         self.log_text.configure(state=tk.DISABLED)
-        self.root.update_idletasks()
     
     def _open_output(self):
         if self._last_output and os.path.exists(self._last_output):
@@ -893,7 +897,10 @@ class EquityTreeApp:
             self._finish(False)
     
     def _finish(self, success):
-        self.gen_btn.configure(state=tk.NORMAL, text="🚀  生成股权树HTML")
+        self.root.after(0, self._do_finish, success)
+    
+    def _do_finish(self, success):
+        self.gen_btn.configure(state=tk.NORMAL, text="生成股权树HTML")
         if success:
             self.open_btn.configure(state=tk.NORMAL)
             messagebox.showinfo("完成", f"股权树HTML已生成!\n\n路径: {self._last_output}")
