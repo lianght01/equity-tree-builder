@@ -45,7 +45,7 @@ def load_xlsx(path):
         ws = wb[name]
         rows = []
         for row in ws.iter_rows(values_only=True):
-            rows.append([str(v) if v is not None else '' for v in row])
+            rows.append([str(v).strip() if v is not None else '' for v in row])
         sheets[name] = rows
     wb.close()
     return sheets
@@ -53,21 +53,46 @@ def load_xlsx(path):
 def parse_sheet(rows):
     if not rows or len(rows) < 2:
         return []
+    # Find header row: first row where at least one cell matches a known column name
+    header_row_idx = 0
+    for idx, row in enumerate(rows):
+        cell_text = ''.join(str(c) for c in row if c).lower()
+        if any(kw in cell_text for kw in ['企业名称','公司名称','上级企业','名称','company','entity','股东']):
+            header_row_idx = idx
+            break
+    
+    header = rows[header_row_idx]
+    # Log what headers we found
+    print(f"  Headers: {[h for h in header if h]}")
+    
     col_idx = {}
-    for i, h in enumerate(rows[0]):
+    for i, h in enumerate(header):
         key = find_header(h)
         if key:
             col_idx[key] = i
+    print(f"  Mapped: {col_idx}")
+    
+    if 'name' not in col_idx:
+        print(f"  ⚠️ 未找到'企业名称'列，尝试自动识别...")
+        # Fallback: first non-empty column is name, second is parent
+        non_empty = [i for i, h in enumerate(header) if h]
+        if len(non_empty) >= 1:
+            col_idx['name'] = non_empty[0]
+        if len(non_empty) >= 2:
+            col_idx['parent'] = non_empty[1]
+    
     result = []
-    for row in rows[1:]:
-        if not any(row):
+    for row in rows[header_row_idx + 1:]:
+        if not any(v.strip() for v in row if isinstance(v, str)):
             continue
         rec = {}
         for key, idx in col_idx.items():
             if idx < len(row):
-                rec[key] = str(row[idx]).strip() if isinstance(row[idx], str) else row[idx]
+                rec[key] = str(row[idx]).strip()
         if rec.get('name'):
             result.append(rec)
+    
+    print(f"  Parsed: {len(result)} records")
     return result
 
 def build_tree(rows):
@@ -487,20 +512,18 @@ class EquityTreeApp:
                 self._log(f"✅ JSON已加载，含 {count_nodes(tree)} 个节点")
             else:
                 sheets = load_xlsx(self.data_path.get())
+                self._log(f"  发现Sheet: {list(sheets.keys())}")
                 data_rows = None
                 for name, rows in sheets.items():
-                    if len(rows) > 1 and any('企业' in str(h) for h in rows[0]):
+                    if len(rows) > 1:
                         data_rows = parse_sheet(rows)
-                        self._log(f"  使用Sheet: {name}")
-                        break
-                if not data_rows:
-                    for name, rows in sheets.items():
-                        if len(rows) > 1:
-                            data_rows = parse_sheet(rows)
-                            self._log(f"  使用Sheet: {name}")
+                        if data_rows:
+                            self._log(f"  ✅ 使用Sheet: {name}")
                             break
                 if not data_rows:
                     self._log("❌ 未找到有效数据")
+                    self._log("  检查要点: ①列名是否包含'企业名称' ②数据是否从第1行开始")
+                    self._log("  支持的列名: 企业名称/公司名称/上级企业名称/持股比例/经营状态")
                     self._finish(False)
                     return
                 
