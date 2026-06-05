@@ -467,7 +467,6 @@ class EquityTreeApp:
     def __init__(self, root):
         self.root = root
         root.title("股权架构树生成器")
-        root.geometry("700x560")
         root.resizable(False, False)
         root.configure(bg="#f0f2f5")
         
@@ -820,8 +819,10 @@ class EquityTreeApp:
             out_name = f"{title.replace(' ', '_')}.html"
             out_path = os.path.join(self.output_dir.get(), out_name)
             
-            # Load data
+            # Log for debugging
             self._log(f"📖 加载数据: {os.path.basename(self.data_path.get())}")
+            if sys.platform == 'win32':
+                self._log(f"  运行环境: Windows, 路径编码正常")
             
             if ext == '.json':
                 with open(self.data_path.get(), 'r') as f:
@@ -893,7 +894,17 @@ class EquityTreeApp:
         except Exception as e:
             self._log(f"❌ 错误: {str(e)}")
             import traceback
-            self._log(traceback.format_exc())
+            tb = traceback.format_exc()
+            self._log(tb)
+            # On Windows, also write to a log file for debugging
+            if sys.platform == 'win32':
+                try:
+                    logpath = os.path.join(os.path.dirname(out_path), 'equity_tree_error.log')
+                    with open(logpath, 'w', encoding='utf-8') as lf:
+                        lf.write(f"Error: {e}\n{tb}")
+                    self._log(f"  错误日志已保存: {logpath}")
+                except:
+                    pass
             self._finish(False)
     
     def _finish(self, success):
@@ -907,6 +918,39 @@ class EquityTreeApp:
 
 # ── 入口 ──
 if __name__ == '__main__':
+    # Windows DPI scaling fix
+    if sys.platform == 'win32':
+        try:
+            import ctypes
+            ctypes.windll.shcore.SetProcessDpiAwareness(1)
+        except:
+            try:
+                ctypes.windll.user32.SetProcessDPIAware()
+            except:
+                pass
+    
+    # Set higher DPI defaults for Windows
+    try:
+        from tkinter import font
+        default_font = font.nametofont("TkDefaultFont")
+        if sys.platform == 'win32':
+            default_font.configure(size=10)
+    except:
+        pass
+    
     root = tk.Tk()
+    
+    # Windows: scale window size for high DPI
+    if sys.platform == 'win32':
+        try:
+            dpi = root.winfo_fpixels('1i')
+            scale = max(1.0, dpi / 96)
+            if scale > 1.2:
+                root.geometry(f"{int(700*scale)}x{int(580*scale)}")
+        except:
+            root.geometry("750x600")
+    else:
+        root.geometry("700x560")
+    
     app = EquityTreeApp(root)
     root.mainloop()
