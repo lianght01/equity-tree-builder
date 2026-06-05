@@ -109,56 +109,83 @@ document.getElementById("col").onclick=function(){root.descendants().forEach(fun
 document.getElementById("rst").onclick=function(){document.getElementById("pf").value=0;document.getElementById("pctInput").value=0;document.getElementById("pv").textContent="0%";if(showBizOnly){showBizOnly=false;var b=document.getElementById("bizToggle");b.style.background="#2b7a78";b.style.color="#fff";b.style.borderColor="#2b7a78";b.textContent="\U0001f3e6 \u4ec5\u663e\u6211\u884c\u5ba2\u6237 ("+bizCount+"\u5bb6)"}af(0);svg.transition().duration(500).call(zoom.transform,it)};
 function smartPrint(noWatermark){
   if(noWatermark){var pwd=prompt("请输入密码");if(pwd!=="lht2026"){alert("密码错误");return;}}
-  // 1. Expand all nodes
+  // Save expand state + current zoom
   var se=new Set();
   root.descendants().forEach(function(d){if(d._children){se.add(d.data.name);d.children=d._children;d._children=null}});
   upd();
-  
-  // 2. Get current zoom
   var zt=d3.zoomTransform(svgEl);
   var zs=zt.k;
-  
-  // 3. Measure tree bounds in D3 coordinates
   var ns=root.descendants();
   var mnX=Infinity,mxX=-Infinity,mnY=Infinity,mxY=-Infinity;
   ns.forEach(function(d){
     if(d.x<mnX)mnX=d.x;if(d.x>mxX)mxX=d.x;
     if(d.y<mnY)mnY=d.y;if(d.y>mxY)mxY=d.y;
   });
-  
-  // 4. SVG size = tree bounds * zoom + padding
-  var tw=Math.ceil((mxX-mnX)*zs+300), th=Math.ceil((mxY-mnY)*zs+200);
-  // A4 landscape per-page area (~960x640 after margins)
+  var tw=Math.ceil((mxX-mnX)*zs+400), th=Math.ceil((mxY-mnY)*zs+300);
   var cols=Math.ceil(tw/960), rows=Math.ceil(th/640);
-  var total=cols*rows;
+  document.getElementById("nc").textContent=ns.length+"节点 · "+ (cols*rows)+"页 ("+cols+"×"+rows+")";
   
-  // 5. Switch SVG to static + explicit size
-  svgEl.setAttribute("width",tw);
-  svgEl.setAttribute("height",th);
-  svgEl.style.position="static";
+  // Create a wrapper div sized to hold the FULL tree at current zoom
+  var wrap=document.createElement("div");
+  wrap.id="print-wrap";
+  wrap.style.width=tw+"px";
+  wrap.style.height=th+"px";
+  wrap.style.overflow="visible";
+  wrap.style.position="relative";
+  wrap.style.margin="0";
+  wrap.style.padding="0";
+  
+  // Move SVG into wrapper
+  svgEl.style.position="absolute";
+  svgEl.style.top="0";
+  svgEl.style.left="0";
   svgEl.style.width=tw+"px";
   svgEl.style.height=th+"px";
+  svgEl.setAttribute("width",tw);
+  svgEl.setAttribute("height",th);
   
-  // 6. Set <g> transform: translate so mnX,mnY → SVG(0,0), keep scale
-  var tx=-mnX*zs+40, ty=-mnY*zs+30;  // small padding
+  // Position tree content inside SVG
+  var tx=-mnX*zs+40, ty=-mnY*zs+30;
   g.attr("transform","translate("+tx+","+ty+")scale("+zs+")");
   
-  // 7. Info
-  document.getElementById("nc").textContent=ns.length+"节点 · "+total+"页 ("+cols+"×"+rows+")";
+  // Insert wrapper before SVG in DOM, move SVG inside
+  svgEl.parentNode.insertBefore(wrap, svgEl);
+  wrap.appendChild(svgEl);
+  
+  // Temporarily hide bar/legend/stats
+  document.getElementById("bar").style.display="none";
+  document.getElementById("legend").style.display="none";
+  var statsEl=document.getElementById("stats");
+  if(statsEl)statsEl.style.display="none";
+  
   if(noWatermark) document.getElementById("watermark").classList.add("hide-print");
   
   setTimeout(function(){
     window.print();
-    // Restore
+    // Restore everything
     document.getElementById("watermark").classList.remove("hide-print");
+    document.getElementById("bar").style.display="";
+    document.getElementById("legend").style.display="";
+    if(statsEl)statsEl.style.display="";
+    
+    // Move SVG back
+    wrap.parentNode.insertBefore(svgEl, wrap);
+    wrap.remove();
+    
+    svgEl.style.position="fixed";
+    svgEl.style.top="46px";
+    svgEl.style.left="0";
+    svgEl.style.width="100%";
+    svgEl.style.height="calc(100vh - 80px)";
+    svgEl.removeAttribute("width");
+    svgEl.removeAttribute("height");
+    
     document.getElementById("nc").textContent=ns.length+"节点";
-    svgEl.removeAttribute("width");svgEl.removeAttribute("height");
-    svgEl.style.position="fixed";svgEl.style.width="100%";svgEl.style.height="calc(100vh - 80px)";
     root.descendants().forEach(function(d){if(se.has(d.data.name)&&d.children){d._children=d.children;d.children=null}});
     upd();
     g.attr("transform","");
     svg.call(zoom.transform,d3.zoomIdentity.translate(zt.x,zt.y).scale(zs));
-  },200);
+  },300);
 }
 document.getElementById("printBtn").onclick=function(){smartPrint(false)};
 document.getElementById("printNoWmBtn").onclick=function(){smartPrint(true)};
