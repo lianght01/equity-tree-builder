@@ -109,61 +109,56 @@ document.getElementById("col").onclick=function(){root.descendants().forEach(fun
 document.getElementById("rst").onclick=function(){document.getElementById("pf").value=0;document.getElementById("pctInput").value=0;document.getElementById("pv").textContent="0%";if(showBizOnly){showBizOnly=false;var b=document.getElementById("bizToggle");b.style.background="#2b7a78";b.style.color="#fff";b.style.borderColor="#2b7a78";b.textContent="\U0001f3e6 \u4ec5\u663e\u6211\u884c\u5ba2\u6237 ("+bizCount+"\u5bb6)"}af(0);svg.transition().duration(500).call(zoom.transform,it)};
 function smartPrint(noWatermark){
   if(noWatermark){var pwd=prompt("请输入密码");if(pwd!=="lht2026"){alert("密码错误");return;}}
-  // Save expand state
+  // 1. Expand all nodes
   var se=new Set();
   root.descendants().forEach(function(d){if(d._children){se.add(d.data.name);d.children=d._children;d._children=null}});
   upd();
   
+  // 2. Get current zoom
+  var zt=d3.zoomTransform(svgEl);
+  var zs=zt.k;
+  
+  // 3. Measure tree bounds in D3 coordinates
+  var ns=root.descendants();
+  var mnX=Infinity,mxX=-Infinity,mnY=Infinity,mxY=-Infinity;
+  ns.forEach(function(d){
+    if(d.x<mnX)mnX=d.x;if(d.x>mxX)mxX=d.x;
+    if(d.y<mnY)mnY=d.y;if(d.y>mxY)mxY=d.y;
+  });
+  
+  // 4. SVG size = tree bounds * zoom + padding
+  var tw=Math.ceil((mxX-mnX)*zs+300), th=Math.ceil((mxY-mnY)*zs+200);
+  // A4 landscape per-page area (~960x640 after margins)
+  var cols=Math.ceil(tw/960), rows=Math.ceil(th/640);
+  var total=cols*rows;
+  
+  // 5. Switch SVG to static + explicit size
+  svgEl.setAttribute("width",tw);
+  svgEl.setAttribute("height",th);
+  svgEl.style.position="static";
+  svgEl.style.width=tw+"px";
+  svgEl.style.height=th+"px";
+  
+  // 6. Set <g> transform: translate so mnX,mnY → SVG(0,0), keep scale
+  var tx=-mnX*zs+40, ty=-mnY*zs+30;  // small padding
+  g.attr("transform","translate("+tx+","+ty+")scale("+zs+")");
+  
+  // 7. Info
+  document.getElementById("nc").textContent=ns.length+"节点 · "+total+"页 ("+cols+"×"+rows+")";
+  if(noWatermark) document.getElementById("watermark").classList.add("hide-print");
+  
   setTimeout(function(){
-    // Get the expanded tree bounding box from D3 layout
-    var ns=root.descendants();
-    var minX=Infinity,maxX=-Infinity,minY=Infinity,maxY=-Infinity;
-    ns.forEach(function(d){
-      if(d.x<minX)minX=d.x;if(d.x>maxX)maxX=d.x;
-      if(d.y<minY)minY=d.y;if(d.y>maxY)maxY=d.y;
-    });
-    var tw=maxX-minX+300,th=maxY-minY+200; // tree width/height in px
-    // A4 landscape printable area at 96dpi (~277x190mm → ~1047x718px)
-    var pw=1050,ph=720;
-    // Calculate pages needed
-    var cols=Math.max(1,Math.ceil(tw/pw));
-    var rows=Math.max(1,Math.ceil(th/ph));
-    var totalPages=cols*rows;
-    
-    // Auto-scale if tree fits in one page width
-    var scale=Math.min(1,pw/tw);
-    
-    // Set SVG dimensions to actual tree size
-    svgEl.style.position="static";
-    svgEl.style.width=tw+"px";
-    svgEl.style.height=th+"px";
-    svgEl.style.overflow="visible";
-    
-    // Apply the zoom transform to show all nodes
-    var cx=(minX+maxX)/2,cy=(minY+maxY)/2;
-    var tx=svgEl.clientWidth/2-cx*scale,ty=80-cy*scale;
-    svg.call(zoom.transform,d3.zoomIdentity.translate(tx,ty).scale(scale));
-    
-    // Update node count display
-    document.getElementById("nc").textContent=ns.length+"节点 · 打印"+totalPages+"页";
-    
-    // Handle watermark
-    if(noWatermark){document.getElementById("watermark").classList.add("hide-print");}
-    
-    setTimeout(function(){
-      window.print();
-      // Restore
-      document.getElementById("watermark").classList.remove("hide-print");
-      svgEl.style.position="fixed";
-      svgEl.style.width="100%";
-      svgEl.style.height="calc(100vh - 80px)";
-      document.getElementById("nc").textContent=ns.length+"节点";
-      root.descendants().forEach(function(d){if(se.has(d.data.name)&&d.children){d._children=d.children;d.children=null}});
-      upd();
-      it=d3.zoomIdentity.translate(svgEl.clientWidth/2-root.x*0.9,60).scale(0.9);
-      svg.call(zoom.transform,it);
-    },200);
-  },100);
+    window.print();
+    // Restore
+    document.getElementById("watermark").classList.remove("hide-print");
+    document.getElementById("nc").textContent=ns.length+"节点";
+    svgEl.removeAttribute("width");svgEl.removeAttribute("height");
+    svgEl.style.position="fixed";svgEl.style.width="100%";svgEl.style.height="calc(100vh - 80px)";
+    root.descendants().forEach(function(d){if(se.has(d.data.name)&&d.children){d._children=d.children;d.children=null}});
+    upd();
+    g.attr("transform","");
+    svg.call(zoom.transform,d3.zoomIdentity.translate(zt.x,zt.y).scale(zs));
+  },200);
 }
 document.getElementById("printBtn").onclick=function(){smartPrint(false)};
 document.getElementById("printNoWmBtn").onclick=function(){smartPrint(true)};
