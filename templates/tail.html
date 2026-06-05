@@ -73,6 +73,13 @@ function updateStats(){
     if(n.children)n.children.forEach(function(c){var cr=walk(c,d+1);for(var k in cr){if(!r[k])r[k]={t:0,b:0};r[k].t+=cr[k].t;r[k].b+=cr[k].b}});
     return r;
   }
+  function sumBiz(n){
+    var s={spot:0,avg:0,loan:0,inc:0};
+    if(n._biz){s.spot+=n._biz.depositSpot||0;s.avg+=n._biz.depositAvg||0;s.loan+=n._biz.loanBalance||0;s.inc+=n._biz.netIncome12m||0;}
+    if(n.children)n.children.forEach(function(c){var cs=sumBiz(c);s.spot+=cs.spot;s.avg+=cs.avg;s.loan+=cs.loan;s.inc+=cs.inc;});
+    return s;
+  }
+  function fm(v){if(!v||v==0)return'-';var abs=Math.abs(v);var s=v<0?'-':'';if(abs>=100000000)return s+(abs/100000000).toFixed(2)+'亿';if(abs>=10000)return s+(abs/10000).toFixed(2)+'万';return s+abs.toFixed(0);}
   var stats=walk(TD,0);var h='';var maxLvl=0;for(var k in stats)if(parseInt(k)>maxLvl)maxLvl=parseInt(k);
   for(var l=1;l<=maxLvl;l++){
     if(!stats[l])continue;
@@ -80,6 +87,15 @@ function updateStats(){
   }
   h+='<tr class="tt"><td colspan="3">合计 '+TD.name+' 体系 '+(stats[0].t+Object.keys(stats).filter(function(k){return k!='0'}).reduce(function(s,k){return s+stats[k].t},0))+' 家</td></tr>';
   h+='<tr class="tb"><td colspan="3">🏦 我行客户 <span style="color:#2b7a78;font-weight:700;font-size:14px">'+bizCount+'</span> 家</td></tr>';
+  // Financial summary
+  var fin=sumBiz(TD);
+  if(fin.avg>0||fin.spot>0||fin.loan>0||fin.inc>0){
+    h+='<tr class="tt"><td colspan="3">━━ 业务数据汇总 ━━</td></tr>';
+    if(fin.avg>0) h+='<tr><td style="color:#5f6368;font-size:11px">日均存款</td><td colspan="2" style="text-align:right;font-weight:700;font-size:13px;color:#1a73e8">'+fm(fin.avg)+'</td></tr>';
+    if(fin.spot>0) h+='<tr><td style="color:#5f6368;font-size:11px">时点存款</td><td colspan="2" style="text-align:right;font-weight:700;font-size:13px;color:#1a73e8">'+fm(fin.spot)+'</td></tr>';
+    if(fin.loan>0) h+='<tr><td style="color:#5f6368;font-size:11px">授信余额</td><td colspan="2" style="text-align:right;font-weight:700;font-size:13px;color:#d93025">'+fm(fin.loan)+'</td></tr>';
+    if(fin.inc>0) h+='<tr><td style="color:#5f6368;font-size:11px">年化收入</td><td colspan="2" style="text-align:right;font-weight:700;font-size:13px;color:#1e8e3e">'+fm(fin.inc)+'</td></tr>';
+  }
   document.getElementById("stbd").innerHTML=h;
 }
 upd();
