@@ -467,7 +467,12 @@ class EquityTreeApp:
     def __init__(self, root):
         self.root = root
         root.title("股权架构树生成器")
-        root.resizable(False, False)
+        root.resizable(True, True)
+        # Windows needs bigger default size
+        if sys.platform == 'win32':
+            root.geometry("800x650")
+        else:
+            root.geometry("720x580")
         root.configure(bg="#f0f2f5")
         
         # Try icon
@@ -896,15 +901,21 @@ class EquityTreeApp:
             import traceback
             tb = traceback.format_exc()
             self._log(tb)
-            # On Windows, also write to a log file for debugging
-            if sys.platform == 'win32':
-                try:
-                    logpath = os.path.join(os.path.dirname(out_path), 'equity_tree_error.log')
-                    with open(logpath, 'w', encoding='utf-8') as lf:
-                        lf.write(f"Error: {e}\n{tb}")
-                    self._log(f"  错误日志已保存: {logpath}")
-                except:
-                    pass
+            # Save error log
+            try:
+                logdir = os.path.expanduser("~/Desktop")
+                logpath = os.path.join(logdir, 'equity_tree_error.log')
+                with open(logpath, 'w', encoding='utf-8') as lf:
+                    lf.write(f"股权树生成器错误日志\n")
+                    lf.write(f"时间: {__import__('datetime').datetime.now()}\n")
+                    lf.write(f"平台: {sys.platform}\n")
+                    lf.write(f"错误: {e}\n")
+                    lf.write(f"详细: {tb}\n")
+                self._log(f"  错误日志已保存到桌面: equity_tree_error.log")
+                if sys.platform == 'win32':
+                    self._log(f"  请将此文件发送给开发者分析")
+            except:
+                pass
             self._finish(False)
     
     def _finish(self, success):
