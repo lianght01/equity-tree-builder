@@ -468,31 +468,24 @@ class EquityTreeApp:
         self.root = root
         root.title("股权架构树生成器")
         root.resizable(True, True)
-        # Windows needs bigger default size
+        # Platform-specific sizing
         if sys.platform == 'win32':
-            root.geometry("800x650")
+            root.geometry("800x640")
+            try:
+                import ctypes
+                ctypes.windll.shcore.SetProcessDpiAwareness(1)
+            except:
+                pass
         else:
-            root.geometry("720x580")
-        root.configure(bg="#f0f2f5")
+            root.geometry("680x540")
+            root.minsize(680, 540)
         
-        # Try icon
         try:
             root.iconphoto(True, tk.PhotoImage(file=os.path.join(TEMPLATE_DIR, '..', 'icon.png')))
         except:
             pass
         
-        # Colors
-        self.C = {
-            'bg': '#f0f2f5',
-            'card': '#ffffff',
-            'primary': '#1a73e8',
-            'primary_hover': '#1557b0',
-            'text': '#202124',
-            'text_sec': '#5f6368',
-            'border': '#e0e0e0',
-            'success': '#1e8e3e',
-            'btn_bg': '#f8f9fa',
-        }
+        self._last_output = None
         
         # Variables
         self.data_path = tk.StringVar()
@@ -502,209 +495,114 @@ class EquityTreeApp:
         self.mode_var = tk.StringVar(value="control")
         self.clean_status_var = tk.BooleanVar(value=True)
         self.output_dir = tk.StringVar(value=os.path.expanduser("~/Desktop"))
-        self._last_output = None
+        
+        # Platform font: use system default on macOS, Microsoft YaHei on Windows
+        self.FONT = ('Microsoft YaHei', 10) if sys.platform == 'win32' else (None, 11)
+        self.FONT_BOLD = ('Microsoft YaHei', 10, 'bold') if sys.platform == 'win32' else (None, 11, 'bold')
+        self.FONT_SM = ('Microsoft YaHei', 9) if sys.platform == 'win32' else (None, 10)
+        self.FONT_LG = ('Microsoft YaHei', 13, 'bold') if sys.platform == 'win32' else (None, 14, 'bold')
         
         self._build_ui()
     
-    def _make_card(self, parent):
-        """Create a card-style container frame"""
-        card = tk.Frame(parent, bg='#ffffff', bd=0, highlightthickness=0,
-                       relief=tk.FLAT)
-        return card
-    
-    def _make_row(self, parent, label_text, tooltip=None):
-        """Create a form row with label on left, content on right"""
-        row = tk.Frame(parent, bg='#ffffff')
-        row.pack(fill=tk.X, pady=3)
-        lbl = tk.Label(row, text=label_text, width=16, anchor=tk.E,
-                      font=("Microsoft YaHei", 10), bg='#ffffff', fg=self.C['text'])
-        lbl.pack(side=tk.LEFT, padx=(0, 8))
-        content = tk.Frame(row, bg='#ffffff')
-        content.pack(side=tk.LEFT, fill=tk.X, expand=True)
-        return content, row
-    
-    def _make_btn(self, parent, text, cmd, style='outline', width=None):
-        """Styled button with outline or primary style"""
-        if style == 'primary':
-            btn = tk.Button(parent, text=text, command=cmd,
-                          bg=self.C['primary'], fg='white',
-                          font=("Microsoft YaHei", 10, "bold"),
-                          padx=16, pady=4, cursor="hand2",
-                          border=0, activebackground=self.C['primary_hover'],
-                          activeforeground='white', relief=tk.FLAT)
-        elif style == 'outline':
-            btn = tk.Button(parent, text=text, command=cmd,
-                          bg='#ffffff', fg=self.C['primary'],
-                          font=("Microsoft YaHei", 10),
-                          padx=12, pady=4, cursor="hand2",
-                          border=0, activebackground='#e8f0fe',
-                          relief=tk.FLAT, highlightthickness=1,
-                          highlightcolor=self.C['border'],
-                          highlightbackground=self.C['border'])
-        else:
-            btn = tk.Button(parent, text=text, command=cmd,
-                          bg=self.C['btn_bg'], fg=self.C['text'],
-                          font=("Microsoft YaHei", 10),
-                          padx=12, pady=4, cursor="hand2",
-                          border=0, activebackground='#e8eaed',
-                          relief=tk.FLAT)
-        
-        # Add hover effects via bindings
-        if style == 'primary':
-            btn.bind("<Enter>", lambda e: btn.configure(bg=self.C['primary_hover']))
-            btn.bind("<Leave>", lambda e: btn.configure(bg=self.C['primary']))
-        
-        return btn
-    
     def _build_ui(self):
         root = self.root
+        root.configure(bg='')
         
-        # ── Header Banner ──
-        header = tk.Frame(root, bg='#1a73e8', height=80)
-        header.pack(fill=tk.X)
-        header.pack_propagate(False)
+        # ── Title area (macOS native style) ──
+        title_frame = tk.Frame(root)
+        title_frame.pack(fill=tk.X, padx=18, pady=(14, 2))
+        tk.Label(title_frame, text="股权架构树生成器", font=self.FONT_LG,
+                fg='').pack(anchor=tk.W)
+        tk.Label(title_frame, text="从Excel数据生成交互式股权架构树HTML", 
+                font=self.FONT_SM, fg='gray').pack(anchor=tk.W, pady=(2, 0))
         
-        tk.Label(header, text="股权架构树生成器", 
-                font=("Microsoft YaHei", 20, "bold"), 
-                bg='#1a73e8', fg='white').place(x=20, y=14)
-        tk.Label(header, text="从Excel数据一键生成交互式股权架构树HTML", 
-                font=("Microsoft YaHei", 10), 
-                bg='#1a73e8', fg='#e0e0e0').place(x=20, y=48)
+        ttk.Separator(root, orient=tk.HORIZONTAL).pack(fill=tk.X, padx=14, pady=(10, 6))
         
-        # ── Main Content Area ──
-        body = tk.Frame(root, bg=self.C['bg'])
-        body.pack(fill=tk.BOTH, expand=True, padx=20, pady=16)
+        # ── Form area ──
+        body = tk.Frame(root)
+        body.pack(fill=tk.BOTH, expand=True, padx=18, pady=(4, 12))
         
-        # ── Card: 数据输入 ──
-        card1 = self._make_card(body)
-        card1.pack(fill=tk.X, pady=(0, 12))
-        
-        tk.Label(card1, text="数据输入", font=("Microsoft YaHei", 12, "bold"),
-                bg='#ffffff', fg=self.C['text']).pack(anchor=tk.W, padx=16, pady=(12, 2))
-        ttk.Separator(card1, orient=tk.HORIZONTAL).pack(fill=tk.X, padx=16)
+        # Helper to create a labeled row
+        def row(label):
+            f = tk.Frame(body)
+            f.pack(fill=tk.X, pady=3)
+            tk.Label(f, text=label, width=14 if sys.platform=='win32' else 12,
+                    anchor=tk.E, font=self.FONT).pack(side=tk.LEFT, padx=(0, 6))
+            c = tk.Frame(f)
+            c.pack(side=tk.LEFT, fill=tk.X, expand=True)
+            return c
         
         # Data file
-        c1, _ = self._make_row(card1, "数据文件")
-        tk.Entry(c1, textvariable=self.data_path,
-                font=("Microsoft YaHei", 10), bg='#f8f9fa',
-                relief=tk.FLAT, bd=0).pack(side=tk.LEFT, fill=tk.X, expand=True, ipady=3)
-        tk.Button(c1, text="浏览", command=self._sel_data,
-                 bg='#ffffff', fg='#1a73e8', font=("Microsoft YaHei", 10),
-                 padx=10, pady=2, cursor="hand2", bd=1, relief=tk.GROOVE,
-                 activebackground='#e8f0fe').pack(side=tk.LEFT, padx=(6,0))
+        c = row("数据文件")
+        tk.Entry(c, textvariable=self.data_path, font=self.FONT).pack(side=tk.LEFT, fill=tk.X, expand=True)
+        tk.Button(c, text="选择", command=self._sel_data, font=self.FONT).pack(side=tk.LEFT, padx=(4, 0))
         
         # Biz file
-        c2, _ = self._make_row(card1, "客户数据")
-        tk.Entry(c2, textvariable=self.biz_path,
-                font=("Microsoft YaHei", 10), bg='#f8f9fa',
-                relief=tk.FLAT, bd=0).pack(side=tk.LEFT, fill=tk.X, expand=True, ipady=3)
-        tk.Button(c2, text="浏览", command=self._sel_biz,
-                 bg='#ffffff', fg='#1a73e8', font=("Microsoft YaHei", 10),
-                 padx=10, pady=2, cursor="hand2", bd=1, relief=tk.GROOVE,
-                 activebackground='#e8f0fe').pack(side=tk.LEFT, padx=(6,0))
-        tk.Label(c2, text="可选", font=("Microsoft YaHei", 9), bg='#ffffff', fg=self.C['text_sec']).pack(side=tk.LEFT, padx=4)
+        c = row("客户数据")
+        tk.Entry(c, textvariable=self.biz_path, font=self.FONT).pack(side=tk.LEFT, fill=tk.X, expand=True)
+        tk.Button(c, text="选择", command=self._sel_biz, font=self.FONT).pack(side=tk.LEFT, padx=(4, 0))
+        tk.Label(c, text="可选", font=self.FONT_SM, fg='gray').pack(side=tk.LEFT, padx=4)
         
-        # ── Card: 参数设置 ──
-        card2 = self._make_card(body)
-        card2.pack(fill=tk.X, pady=(0, 12))
-        
-        tk.Label(card2, text="参数设置", font=("Microsoft YaHei", 12, "bold"),
-                bg='#ffffff', fg=self.C['text']).pack(anchor=tk.W, padx=16, pady=(12, 2))
-        ttk.Separator(card2, orient=tk.HORIZONTAL).pack(fill=tk.X, padx=16)
+        # Separator
+        ttk.Separator(body, orient=tk.HORIZONTAL).pack(fill=tk.X, pady=(10, 6))
         
         # Title
-        c3, _ = self._make_row(card2, "HTML标题")
-        tk.Entry(c3, textvariable=self.title_var,
-                font=("Microsoft YaHei", 10), bg='#f8f9fa',
-                relief=tk.FLAT, bd=0).pack(side=tk.LEFT, fill=tk.X, expand=True, ipady=3)
+        c = row("HTML标题")
+        tk.Entry(c, textvariable=self.title_var, font=self.FONT).pack(side=tk.LEFT, fill=tk.X, expand=True)
         
-        # Root node
-        c4, _ = self._make_row(card2, "指定根节点")
-        tk.Entry(c4, textvariable=self.root_var,
-                font=("Microsoft YaHei", 10), bg='#f8f9fa',
-                relief=tk.FLAT, bd=0).pack(side=tk.LEFT, fill=tk.X, expand=True, ipady=3)
-        tk.Label(c4, text="留空自动识别", font=("Microsoft YaHei", 9), bg='#ffffff', fg=self.C['text_sec']).pack(side=tk.LEFT, padx=4)
+        # Root
+        c = row("根节点")
+        tk.Entry(c, textvariable=self.root_var, font=self.FONT).pack(side=tk.LEFT, fill=tk.X, expand=True)
+        tk.Label(c, text="留空自动", font=self.FONT_SM, fg='gray').pack(side=tk.LEFT, padx=4)
         
         # Output
-        c5, _ = self._make_row(card2, "输出位置")
-        tk.Entry(c5, textvariable=self.output_dir,
-                font=("Microsoft YaHei", 10), bg='#f8f9fa',
-                relief=tk.FLAT, bd=0).pack(side=tk.LEFT, fill=tk.X, expand=True, ipady=3)
-        tk.Button(c5, text="选择", command=self._sel_dir,
-                 bg='#ffffff', fg='#1a73e8', font=("Microsoft YaHei", 10),
-                 padx=10, pady=2, cursor="hand2", bd=1, relief=tk.GROOVE,
-                 activebackground='#e8f0fe').pack(side=tk.LEFT, padx=(6,0))
+        c = row("输出位置")
+        tk.Entry(c, textvariable=self.output_dir, font=self.FONT).pack(side=tk.LEFT, fill=tk.X, expand=True)
+        tk.Button(c, text="选择", command=self._sel_dir, font=self.FONT).pack(side=tk.LEFT, padx=(4, 0))
         
-        # ── Card: 构建选项 ──
-        card3 = self._make_card(body)
-        card3.pack(fill=tk.X, pady=(0, 12))
+        # Separator
+        ttk.Separator(body, orient=tk.HORIZONTAL).pack(fill=tk.X, pady=(10, 6))
         
-        opt_row = tk.Frame(card3, bg='#ffffff')
-        opt_row.pack(fill=tk.X, padx=16, pady=(10, 4))
+        # Mode + options row
+        opt_frame = tk.Frame(body)
+        opt_frame.pack(fill=tk.X, pady=4)
         
-        # Mode selector
-        mode_frame = tk.Frame(opt_row, bg='#ffffff')
-        mode_frame.pack(side=tk.LEFT)
-        tk.Label(mode_frame, text="构建模式:", font=("Microsoft YaHei", 10, "bold"),
-                bg='#ffffff', fg=self.C['text']).pack(side=tk.LEFT)
+        tk.Label(opt_frame, text="模式:", font=self.FONT).pack(side=tk.LEFT)
+        tk.Radiobutton(opt_frame, text="控制权树", variable=self.mode_var, value="control",
+                      font=self.FONT).pack(side=tk.LEFT, padx=(4, 0))
+        tk.Radiobutton(opt_frame, text="投资穿透树", variable=self.mode_var, value="invest",
+                      font=self.FONT).pack(side=tk.LEFT, padx=(4, 0))
         
-        self._mode_buttons = []
-        for txt, val in [("控制权树", "control"), ("投资穿透树", "invest")]:
-            rb = tk.Radiobutton(mode_frame, text=txt, variable=self.mode_var, value=val,
-                              font=("Microsoft YaHei", 10), bg='#ffffff',
-                              activebackground='#ffffff',
-                              indicatoron=0, padx=12, pady=2, cursor="hand2")
-            rb.pack(side=tk.LEFT, padx=(6, 0))
-            self._mode_buttons.append(rb)
+        tk.Checkbutton(opt_frame, text="剔除异常企业", variable=self.clean_status_var,
+                      font=self.FONT_SM).pack(side=tk.RIGHT)
+        tk.Button(opt_frame, text="生成模板", command=self._gen_template,
+                 font=self.FONT_SM).pack(side=tk.RIGHT, padx=(0, 10))
         
-        self._update_mode_style()
-        self.mode_var.trace_add('write', lambda *a: self._update_mode_style())
+        # Hint text
+        tk.Label(body, text="控制权树 = 取最大股东追溯控制链   |   投资穿透树 = 从指定人展开",
+                font=self.FONT_SM, fg='gray').pack(anchor=tk.W, pady=(2, 8))
         
-        # Right side
-        right_frame = tk.Frame(opt_row, bg='#ffffff')
-        right_frame.pack(side=tk.RIGHT)
-        
-        tk.Button(right_frame, text="模板", command=self._gen_template,
-                 bg='#ffffff', fg='#1a73e8', font=("Microsoft YaHei", 10),
-                 padx=10, pady=2, cursor="hand2", bd=1, relief=tk.GROOVE,
-                 activebackground='#e8f0fe').pack(side=tk.LEFT)
-        
-        tk.Checkbutton(right_frame, text="剔除异常", variable=self.clean_status_var,
-                      font=("Microsoft YaHei", 9), bg='#ffffff',
-                      activebackground='#ffffff', fg=self.C['text_sec']).pack(side=tk.LEFT, padx=(10,0))
-        
-        # Hint
-        hint_row = tk.Frame(card3, bg='#ffffff')
-        hint_row.pack(fill=tk.X, padx=16, pady=(0, 10))
-        tk.Label(hint_row, text="控制权树=取最大股东追控制链 | 投资穿透树=从指定人展开",
-                font=("Microsoft YaHei", 9), bg='#ffffff', fg=self.C['text_sec']).pack(side=tk.LEFT)
-        
-        # ── Generate Button ──
-        btn_frame = tk.Frame(body, bg=self.C['bg'])
-        btn_frame.pack(fill=tk.X, pady=(4, 0))
+        # ── Buttons ──
+        btn_frame = tk.Frame(body)
+        btn_frame.pack(fill=tk.X, pady=(4, 8))
         
         self.gen_btn = tk.Button(btn_frame, text="生成股权树HTML", command=self._generate,
-                               bg='#1a73e8', fg='white', font=("Microsoft YaHei", 11, "bold"),
-                               padx=20, pady=6, cursor="hand2", bd=0, relief=tk.FLAT,
-                               activebackground='#1557b0', activeforeground='white')
-        self.gen_btn.pack(side=tk.LEFT, padx=(0, 8))
+                               font=self.FONT_BOLD, padx=18, pady=4, cursor="hand2")
+        self.gen_btn.pack(side=tk.LEFT)
         
         self.open_btn = tk.Button(btn_frame, text="打开文件", command=self._open_output,
-                                bg='#ffffff', fg='#1a73e8', font=("Microsoft YaHei", 10),
-                                padx=14, pady=4, cursor="hand2", bd=1, relief=tk.GROOVE,
-                                activebackground='#e8f0fe', state=tk.DISABLED)
-        self.open_btn.pack(side=tk.LEFT)
+                                font=self.FONT, padx=12, pady=4, state=tk.DISABLED)
+        self.open_btn.pack(side=tk.LEFT, padx=(8, 0))
         
-        # ── Log Area ──
-        log_frame = tk.Frame(body, bg='#ffffff', bd=1, relief=tk.GROOVE)
-        log_frame.pack(fill=tk.BOTH, expand=True, pady=(8, 0))
+        # ── Log ──
+        tk.Label(body, text="运行日志:", font=self.FONT_SM, fg='gray').pack(anchor=tk.W, pady=(4, 2))
         
-        self.log_text = tk.Text(log_frame, height=6,
-                               font=("Consolas", 10),
-                               wrap=tk.WORD, state=tk.DISABLED,
-                               bg='#fafafa', fg=self.C['text'],
-                               relief=tk.FLAT, padx=12, pady=8, bd=0)
-        scroll = tk.Scrollbar(log_frame, command=self.log_text.yview, width=10, bd=0)
+        log_frame = tk.Frame(body, bd=1, relief=tk.SUNKEN)
+        log_frame.pack(fill=tk.BOTH, expand=True)
+        
+        self.log_text = tk.Text(log_frame, height=5, font=("Menlo", 10) if sys.platform=='darwin' else ("Consolas", 10),
+                               wrap=tk.WORD, state=tk.DISABLED, bg='#fafafa', relief=tk.FLAT, padx=8, pady=6, bd=0)
+        scroll = tk.Scrollbar(log_frame, command=self.log_text.yview, width=10)
         self.log_text.configure(yscrollcommand=scroll.set)
         scroll.pack(side=tk.RIGHT, fill=tk.Y)
         self.log_text.pack(fill=tk.BOTH, expand=True)
