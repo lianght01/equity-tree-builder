@@ -502,13 +502,11 @@ class EquityTreeApp:
     
     def _build_ui(self):
         root = self.root
-        root.configure(bg='')
         
         # ── Title area (macOS native style) ──
         title_frame = tk.Frame(root)
         title_frame.pack(fill=tk.X, padx=18, pady=(14, 2))
-        tk.Label(title_frame, text="股权架构树生成器", font=self.FONT_LG,
-                fg='').pack(anchor=tk.W)
+        tk.Label(title_frame, text="股权架构树生成器", font=self.FONT_LG).pack(anchor=tk.W)
         tk.Label(title_frame, text="导入Excel数据 → 一键生成交互式股权架构树HTML", 
                 font=self.FONT_SM, fg='gray').pack(anchor=tk.W, pady=(2, 0))
         
