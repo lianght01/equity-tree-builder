@@ -503,11 +503,11 @@ class EquityTreeApp:
             self.FONT_SM = ('Microsoft YaHei', 9)
             self.FONT_LG = ('Microsoft YaHei', 13, 'bold')
         else:
-            # macOS - use system fonts
-            self.FONT = ('Helvetica Neue', 12)
-            self.FONT_BOLD = ('Helvetica Neue', 12, 'bold')
-            self.FONT_SM = ('Helvetica Neue', 11)
-            self.FONT_LG = ('Helvetica Neue', 15, 'bold')
+            # macOS: use standard macOS font names
+            self.FONT = ('Helvetica', 13)
+            self.FONT_BOLD = ('Helvetica', 13, 'bold')
+            self.FONT_SM = ('Helvetica', 11)
+            self.FONT_LG = ('Helvetica', 16, 'bold')
         
         self._build_ui()
     
