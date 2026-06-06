@@ -468,17 +468,6 @@ class EquityTreeApp:
         self.root = root
         root.title("股权架构树生成器")
         root.resizable(True, True)
-        # Platform-specific sizing
-        if sys.platform == 'win32':
-            root.geometry("800x640")
-            try:
-                import ctypes
-                ctypes.windll.shcore.SetProcessDpiAwareness(1)
-            except:
-                pass
-        else:
-            root.geometry("680x540")
-            root.minsize(680, 540)
         
         try:
             root.iconphoto(True, tk.PhotoImage(file=os.path.join(TEMPLATE_DIR, '..', 'icon.png')))
@@ -829,7 +818,8 @@ class EquityTreeApp:
 
 # ── 入口 ──
 if __name__ == '__main__':
-    # Windows DPI scaling fix
+    root = tk.Tk()
+    
     if sys.platform == 'win32':
         try:
             import ctypes
@@ -839,29 +829,11 @@ if __name__ == '__main__':
                 ctypes.windll.user32.SetProcessDPIAware()
             except:
                 pass
-    
-    # Set higher DPI defaults for Windows
-    try:
-        from tkinter import font
-        default_font = font.nametofont("TkDefaultFont")
-        if sys.platform == 'win32':
-            default_font.configure(size=10)
-    except:
-        pass
-    
-    root = tk.Tk()
-    
-    # Windows: scale window size for high DPI
-    if sys.platform == 'win32':
-        try:
-            dpi = root.winfo_fpixels('1i')
-            scale = max(1.0, dpi / 96)
-            if scale > 1.2:
-                root.geometry(f"{int(700*scale)}x{int(580*scale)}")
-        except:
-            root.geometry("750x600")
+        root.geometry("800x650")
+        root.minsize(780, 600)
     else:
-        root.geometry("700x560")
+        root.geometry("720x580")
+        root.minsize(700, 500)
     
     app = EquityTreeApp(root)
     root.mainloop()
