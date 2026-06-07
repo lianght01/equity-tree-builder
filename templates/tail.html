@@ -109,7 +109,9 @@ document.getElementById("col").onclick=function(){root.descendants().forEach(fun
 document.getElementById("rst").onclick=function(){document.getElementById("pf").value=0;document.getElementById("pctInput").value=0;document.getElementById("pv").textContent="0%";if(showBizOnly){showBizOnly=false;var b=document.getElementById("bizToggle");b.style.background="#2b7a78";b.style.color="#fff";b.style.borderColor="#2b7a78";b.textContent="\U0001f3e6 \u4ec5\u663e\u6211\u884c\u5ba2\u6237 ("+bizCount+"\u5bb6)"}af(0);svg.transition().duration(500).call(zoom.transform,it)};
 function smartPrint(noWatermark){
   if(noWatermark){var pwd=prompt("请输入密码");if(pwd!=="lht2026"){alert("密码错误");return;}}
-  // Save expand state + current zoom
+  // Save expand state + current zoom + grid state
+  var savedGrid=showGrid;
+  if(savedGrid){showGrid=false;svg.selectAll(".print-grid").remove();}
   var se=new Set();
   root.descendants().forEach(function(d){if(d._children){se.add(d.data.name);d.children=d._children;d._children=null}});
   upd();
@@ -185,6 +187,7 @@ function smartPrint(noWatermark){
     upd();
     g.attr("transform","");
     svg.call(zoom.transform,d3.zoomIdentity.translate(zt.x,zt.y).scale(zs));
+    if(savedGrid){showGrid=true;drawGrid();}
   },300);
 }
 document.getElementById("printBtn").onclick=function(){smartPrint(false)};
