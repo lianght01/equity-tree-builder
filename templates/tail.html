@@ -109,9 +109,7 @@ document.getElementById("col").onclick=function(){root.descendants().forEach(fun
 document.getElementById("rst").onclick=function(){document.getElementById("pf").value=0;document.getElementById("pctInput").value=0;document.getElementById("pv").textContent="0%";if(showBizOnly){showBizOnly=false;var b=document.getElementById("bizToggle");b.style.background="#2b7a78";b.style.color="#fff";b.style.borderColor="#2b7a78";b.textContent="\U0001f3e6 \u4ec5\u663e\u6211\u884c\u5ba2\u6237 ("+bizCount+"\u5bb6)"}af(0);svg.transition().duration(500).call(zoom.transform,it)};
 function smartPrint(noWatermark){
   if(noWatermark){var pwd=prompt("请输入密码");if(pwd!=="lht2026"){alert("密码错误");return;}}
-  // Save expand state + current zoom + grid state
-  var savedGrid=showGrid;
-  if(savedGrid){showGrid=false;svg.selectAll(".print-grid").remove();}
+  // Save expand state + current zoom
   var se=new Set();
   root.descendants().forEach(function(d){if(d._children){se.add(d.data.name);d.children=d._children;d._children=null}});
   upd();
@@ -187,60 +185,11 @@ function smartPrint(noWatermark){
     upd();
     g.attr("transform","");
     svg.call(zoom.transform,d3.zoomIdentity.translate(zt.x,zt.y).scale(zs));
-    if(savedGrid){showGrid=true;drawGrid();}
   },300);
 }
 document.getElementById("printBtn").onclick=function(){smartPrint(false)};
 document.getElementById("printNoWmBtn").onclick=function(){smartPrint(true)};
 document.getElementById("layoutToggle").onclick=function(){isVertical=!isVertical;var btn=document.getElementById("layoutToggle");if(isVertical){btn.textContent="📐 横版排列";btn.style.background="#fff";btn.style.color="#6f42c1"}else{btn.textContent="📐 竖版排列";btn.style.background="#6f42c1";btn.style.color="#fff"}upd();setTimeout(function(){var cw=svgEl.clientWidth,ch=svgEl.clientHeight;var s=Math.min(0.9,cw/(root.x*2||1)*0.8);svg.call(zoom.transform,d3.zoomIdentity.translate(cw/2-root.x*s,60).scale(s))},50)};
-
-// Print page grid overlay
-var showGrid=false,pageW=960,pageH=640;
-document.getElementById("gridToggle").onclick=function(){
-  showGrid=!showGrid;
-  var btn=document.getElementById("gridToggle");
-  if(showGrid){btn.style.background="#fff";btn.style.color="#9c27b0"}
-  else{btn.style.background="#9c27b0";btn.style.color="#fff"}
-  drawGrid();
-};
-function drawGrid(){
-  svg.selectAll(".print-grid").remove();
-  if(!showGrid)return;
-  // Grid in screen coords (after zoom)
-  var zt=d3.zoomTransform(svgEl);
-  var zs=zt.k;
-  // Draw grid as overlay in screen space via a separate group
-  var gg=svg.append("g").attr("class","print-grid").lower();
-  // Get viewport center
-  var cw=svgEl.clientWidth,ch=svgEl.clientHeight;
-  var cx=cw/2-zt.x,cy=ch/2-zt.y;
-  // Calculate page grid extent (center around viewport, cover ~3x3 pages)
-  var colStart=Math.floor((cx-cw)/pageW/zs);
-  var rowStart=Math.floor((cy-ch)/pageH/zs);
-  var colEnd=Math.ceil((cx+cw)/pageW/zs);
-  var rowEnd=Math.ceil((cy+ch)/pageH/zs);
-  for(var r=rowStart;r<=rowEnd;r++){
-    for(var c=colStart;c<=colEnd;c++){
-      var x=c*pageW*zs+zt.x,y=r*pageH*zs+zt.y;
-      gg.append("rect")
-        .attr("x",x).attr("y",y)
-        .attr("width",pageW*zs).attr("height",pageH*zs)
-        .attr("fill","none").attr("stroke","#9c27b0").attr("stroke-width",1.5)
-        .attr("stroke-dasharray","6,4").attr("opacity",0.6);
-      // Page number
-      var num=(r-colStart)*3+c-colStart+1;
-      gg.append("text")
-        .attr("x",x+8).attr("y",y+18)
-        .attr("font-size","13px").attr("font-weight","bold")
-        .attr("fill","#9c27b0").attr("opacity",0.5)
-        .text(num);
-    }
-  }
-}
-// Update grid on zoom
-svg.on("zoom",function(){if(showGrid)drawGrid();});
-// Re-draw on filter changes
-var _origUpd2=upd;upd=function(){_origUpd2();if(showGrid)setTimeout(drawGrid,50);};
 
 // Search with arrow navigation
 var srchMatches=[],srchIdx=-1;
