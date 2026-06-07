@@ -201,7 +201,7 @@ document.getElementById("gridToggle").onclick=function(){
   drawGrid();
 };
 function drawGrid(){
-  g.selectAll(".print-grid").remove();
+  svg.selectAll(".print-grid").remove();
   if(!showGrid)return;
   // Grid in screen coords (after zoom)
   var zt=d3.zoomTransform(svgEl);
