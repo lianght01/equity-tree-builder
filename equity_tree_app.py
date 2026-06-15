@@ -533,4 +533,4 @@ if __name__ == '__main__':
         js_api=Api(None),
         html=landing_html(),
     )
-    webview.start(debug=True, http_server=True)
+    webview.start(debug=False, http_server=True)
