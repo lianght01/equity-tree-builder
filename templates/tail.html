@@ -62,6 +62,19 @@ svg.call(zoom.transform,it);
 var bizCount = 0;
 (function countBiz(n){if(n._biz)bizCount++;if(n.children)n.children.forEach(function(c){countBiz(c)})})(TD);
 
+function updLinks(){
+  var ls=root.links();
+  g.selectAll(".link").data(ls,function(d){return d.target.data.name}).join("path").attr("class","link")
+    .attr("d",function(d){
+      var srcY = d.source.y + 18;
+      var tgtY = d.target.y - (d.target.depth>=2 ? SETTINGS.vertNodeH/2 : 18);
+      return"M"+d.source.x+","+srcY+"C"+d.source.x+","+((srcY+tgtY)/2)+" "+d.target.x+","+((srcY+tgtY)/2)+" "+d.target.x+","+tgtY;
+    });
+  g.selectAll(".link-label").data(ls,function(d){return d.target.data.name}).join("text").attr("class","link-label")
+    .attr("x",function(d){return(d.source.x+d.target.x)/2}).attr("y",function(d){return(d.source.y+d.target.y)/2-5})
+    .text(function(d){var pt=d.target.data._pt,dr=d.target.data.ratio;var ps=pt!==undefined?(pt%1===0?pt:pt.toFixed(1))+"%":"";if(dr&&dr!=""){return dr+"→"+ps;}return ps;});
+}
+
 function upd(){
   tl(root);
   var anyExpanded = false;
@@ -84,8 +97,11 @@ function upd(){
     .attr("x",function(d){return(d.source.x+d.target.x)/2}).attr("y",function(d){return(d.source.y+d.target.y)/2-5})
     .text(function(d){var pt=d.target.data._pt,dr=d.target.data.ratio;var ps=pt!==undefined?(pt%1===0?pt:pt.toFixed(1))+"%":"";if(dr&&dr!=""){return dr+"→"+ps;}return ps;});
   g.selectAll(".node").data(ns,function(d){return d.data.name}).join("g").attr("class","node")
-    .attr("transform",function(d){return"translate("+d.x+","+d.y+")"}).style("cursor","pointer")
+    .attr("transform",function(d){return"translate("+d.x+","+d.y+")"}).style("cursor","grab")
     .on("click",function(ev,d){ev.stopPropagation();if(d.children){d._children=d.children;d.children=null}else if(d._children){d.children=d._children;d._children=null}upd()})
+    .call(d3.drag().on("start",function(ev,d){ev.sourceEvent.stopPropagation();d3.select(this).style("cursor","grabbing");d._dx=d.x;d._dy=d.y})
+      .on("drag",function(ev,d){d.x=ev.x;d.y=ev.y;d3.select(this).attr("transform","translate("+d.x+","+d.y+")");updLinks()})
+      .on("end",function(ev,d){d3.select(this).style("cursor","grab")}))
     .on("mouseenter",function(ev,d){
       var k=d.children||d._children||[],pt=d.data._pt;
       var ps=pt!==undefined?((pt%1===0?pt:pt.toFixed(1))+"%"):(d.data.ratio||"-");
