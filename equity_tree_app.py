@@ -50,13 +50,12 @@ def load_xlsx(path):
         for row in ws.iter_rows(values_only=True):
             cleaned = []
             for v in row:
-                try:
-                    s = str(v).strip() if v is not None else ''
-                except:
-                    try:
-                        s = str(v, 'utf-8', errors='replace').strip() if v is not None else ''
-                    except:
-                        s = repr(v) if v is not None else ''
+                if isinstance(v, bytes):
+                    s = v.decode('utf-8', errors='replace').strip()
+                elif v is None:
+                    s = ''
+                else:
+                    s = str(v).strip()
                 cleaned.append(s)
             rows.append(cleaned)
         sheets[name] = rows
@@ -334,8 +333,8 @@ def generate_full_html(tree, title):
     tail_path = os.path.join(TEMPLATE_DIR, 'tail.html')
 
     if os.path.exists(head_path) and os.path.exists(tail_path):
-        with open(head_path,'r') as f: head = f.read()
-        with open(tail_path,'r') as f: tail_ = f.read()
+        with open(head_path,'r',encoding='utf-8') as f: head = f.read()
+        with open(tail_path,'r',encoding='utf-8') as f: tail_ = f.read()
         head = re.sub(r'<title>[^<]+</title>', f'<title>{title}</title>', head)
         head = re.sub(r'鞍钢集团控股股权关系树', title, head)
         head = head.replace('>1372节点<', f'>{total}节点<')
