@@ -48,7 +48,17 @@ def load_xlsx(path):
         ws = wb[name]
         rows = []
         for row in ws.iter_rows(values_only=True):
-            rows.append([str(v).strip() if v is not None else '' for v in row])
+            cleaned = []
+            for v in row:
+                try:
+                    s = str(v).strip() if v is not None else ''
+                except:
+                    try:
+                        s = str(v, 'utf-8', errors='replace').strip() if v is not None else ''
+                    except:
+                        s = repr(v) if v is not None else ''
+                cleaned.append(s)
+            rows.append(cleaned)
         sheets[name] = rows
     wb.close()
     return sheets
