@@ -246,6 +246,9 @@ def load_biz_data(path, tree):
                     'depositSpot': ['时点存款', '时点'],
                     'loanBalance': ['授信余额', '贷款余额'],
                     'netIncome12m': ['年化收入', '净收入'],
+                    'payrollCount': ['代发个人客户', '代发人数', '代发户数'],
+                    'payrollAmount': ['发薪量', '代发金额', '代发总额'],
+                    'pensionCardCount': ['养老金发卡', '养老金卡', '养老发卡'],
                     'scale': ['规模'],
                     'manager': ['客户经理', '管户'],
                 }.items():
@@ -264,7 +267,7 @@ def load_biz_data(path, tree):
                     if idx < len(row) and row[idx]:
                         v = row[idx]
                         # Numeric fields
-                        if k in ['depositAvg', 'depositSpot', 'loanBalance', 'netIncome12m']:
+                        if k in ['depositAvg', 'depositSpot', 'loanBalance', 'netIncome12m', 'payrollCount', 'payrollAmount', 'pensionCardCount']:
                             try:
                                 v = float(str(v).replace(',', ''))
                             except:
@@ -303,6 +306,9 @@ def load_biz_data(path, tree):
                 'interestIncome': 0,
                 'netIncome': float(b.get('netIncome12m', 0)) / 4,
                 'netIncome12m': float(b.get('netIncome12m', 0)),
+                'payrollCount': int(b.get('payrollCount', 0)),
+                'payrollAmount': float(b.get('payrollAmount', 0)),
+                'pensionCardCount': int(b.get('pensionCardCount', 0)),
                 'scale': str(b.get('scale', '')),
                 'manager': str(b.get('manager', '')),
             }

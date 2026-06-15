@@ -1,22 +1,81 @@
 
-
 var svgEl=document.getElementById("svg"),svg=d3.select(svgEl),g=svg.append("g");
-var tl=d3.tree().size([2400,50000]).nodeSize([180,160]).separation(function(a,b){return a.parent===b.parent?1.3:2});
-var root=d3.hierarchy(TD);tl(root);
+
+// --- Layout settings (adjustable via panel) ---
+var SETTINGS = {
+  foldedSpacing: 180,    // 一级子公司折叠水平间距
+  expandCompress: 0.7,   // 一级子公司展开压缩系数(0-1,越小越紧)
+  deepCompress: 0.35,    // 2级以下压缩系数(0-1,越小越紧)
+  vertSpacing: 180,      // 根→一级垂直间距
+  horzNodeW: 220,        // 横排节点宽度
+  vertNodeH: 170,        // 竖排节点高度
+};
+
+// Build settings panel
+(function(){
+  var params = [
+    {key:'foldedSpacing', label:'折叠水平间距', min:50, max:400, unit:'px'},
+    {key:'expandCompress', label:'展开压缩系数', min:0.1, max:1, step:0.05, unit:''},
+    {key:'deepCompress', label:'深层压缩系数', min:0.1, max:1, step:0.05, unit:''},
+    {key:'vertSpacing', label:'垂直间距', min:50, max:500, unit:'px'},
+    {key:'horzNodeW', label:'横排节点宽', min:80, max:400, unit:'px'},
+    {key:'vertNodeH', label:'竖排节点高', min:60, max:300, unit:'px'},
+  ];
+  var html='';
+  params.forEach(function(p){
+    var val = SETTINGS[p.key];
+    html += '<div style="margin-bottom:8px">';
+    html += '<div style="display:flex;justify-content:space-between;font-size:12px">';
+    html += '<span>'+p.label+'</span>';
+    html += '<span id="sv_'+p.key+'" style="font-weight:bold;color:#0969da">'+val+(p.unit||'')+'</span>';
+    html += '</div>';
+    html += '<input type="range" id="sk_'+p.key+'" min="'+p.min+'" max="'+p.max+'" step="'+(p.step||1)+'" value="'+val+'" style="width:100%;cursor:pointer">';
+    html += '</div>';
+  });
+  document.getElementById('setBody').innerHTML = html;
+  
+  params.forEach(function(p){
+    document.getElementById('sk_'+p.key).addEventListener('input', function(){
+      var v = parseFloat(this.value);
+      if(p.step && p.step < 1) v = Math.round(v/p.step)*p.step;
+      document.getElementById('sv_'+p.key).textContent = v + (p.unit||'');
+      applySetting(p.key, v);
+    });
+  });
+})();
+
+var tl = d3.tree().size([2400,50000]).nodeSize([SETTINGS.foldedSpacing, SETTINGS.vertSpacing]).separation(function(a,b){return a.parent===b.parent?1.3:2});
+var root = d3.hierarchy(TD); tl(root);
+// Initial compress
+root.descendants().forEach(function(d){
+  if(d.depth>=2 && d.parent){
+    d.x = d.parent.x + (d.x - d.parent.x) * SETTINGS.deepCompress;
+  }
+});
 root.descendants().forEach(function(d){if(d.depth>=1){d._children=d.children;d.children=null}});
 var zoom=d3.zoom().scaleExtent([0.1,5]).on("zoom",function(e){g.attr("transform",e.transform)});
 svg.call(zoom);
 var is=0.9,it=d3.zoomIdentity.translate(svgEl.clientWidth/2-root.x*is,60).scale(is);
 svg.call(zoom.transform,it);
 
-var isVertical=false;
-
 function upd(){
-  if(isVertical){tl.size([50000,120000]).nodeSize([180,280]);}else{tl.size([2400,50000]).nodeSize([180,160]);}
-  tl(root);var ns=root.descendants(),ls=root.links();
-  if(isVertical){ns.forEach(function(d){var t=d.x;d.x=d.y;d.y=t;});}
+  tl(root);
+  var anyExpanded = false;
+  root.descendants().forEach(function(d){if(d.depth===1 && d.children) anyExpanded=true;});
+  root.descendants().forEach(function(d){
+    if(d.depth===1 && d.parent && anyExpanded){
+      d.x = d.parent.x + (d.x - d.parent.x) * SETTINGS.expandCompress;
+    }else if(d.depth>=2 && d.parent){
+      d.x = d.parent.x + (d.x - d.parent.x) * SETTINGS.deepCompress;
+    }
+  });
+  var ns=root.descendants(),ls=root.links();
   g.selectAll(".link").data(ls,function(d){return d.target.data.name}).join("path").attr("class","link")
-    .attr("d",function(d){return"M"+d.source.x+","+(d.source.y+22)+"C"+d.source.x+","+((d.source.y+d.target.y)/2)+" "+d.target.x+","+((d.source.y+d.target.y)/2)+" "+d.target.x+","+(d.target.y-22)});
+    .attr("d",function(d){
+      var srcY = d.source.y + 18; // bottom of source box (36/2)
+      var tgtY = d.target.y - (d.target.depth>=2 ? SETTINGS.vertNodeH/2 : 18); // top of target box
+      return"M"+d.source.x+","+srcY+"C"+d.source.x+","+((srcY+tgtY)/2)+" "+d.target.x+","+((srcY+tgtY)/2)+" "+d.target.x+","+tgtY;
+    });
   g.selectAll(".link-label").data(ls,function(d){return d.target.data.name}).join("text").attr("class","link-label")
     .attr("x",function(d){return(d.source.x+d.target.x)/2}).attr("y",function(d){return(d.source.y+d.target.y)/2-5})
     .text(function(d){var pt=d.target.data._pt,dr=d.target.data.ratio;var ps=pt!==undefined?(pt%1===0?pt:pt.toFixed(1))+"%":"";if(dr&&dr!=""){return dr+"→"+ps;}return ps;});
@@ -26,17 +85,20 @@ function upd(){
     .on("mouseenter",function(ev,d){
       var k=d.children||d._children||[],pt=d.data._pt;
       var ps=pt!==undefined?((pt%1===0?pt:pt.toFixed(1))+"%"):(d.data.ratio||"-");
-      // Build full path from root
       var path="";var n=d;var segs=[];while(n){segs.unshift(n.data.name);n=n.parent;}
       path=segs.join(" > ");
-      var tip="<div class=\"tn\">"+d.data.name+"</div><div class=\"ti\">"+(d.depth+1)+"\u7ea7 \u00b7 \u7a7f\u900f\u6301\u80a1"+ps+" \u00b7 \u4e0b\u7ea7"+k.length+"\u5bb6</div><div style=\"font-size:11px;color:#8b949e;margin-top:3px;word-break:break-all\">"+path+"</div>";
+      var tip="<div class=\"tn\">"+d.data.name+"</div><div class=\"ti\">"+(d.depth+1)+"级 · 穿透持股"+ps+" · 下级"+k.length+"家</div><div style=\"font-size:11px;color:#8b949e;margin-top:3px;word-break:break-all\">"+path+"</div>";
       if(d.data._biz){
         var b=d.data._biz;
-        tip+='<hr class="thr"><div style="font-size:14px;font-weight:bold">🏦 \u4ea4\u884c \u5f00\u6237'+b.openDate+'</div><table>';
-        tip+='<tr><td>\u65e5\u5747\u5b58\u6b3e</td><td class="vl" style="color:#2b7a78">'+(b.depositAvg>=10000?(b.depositAvg/10000).toFixed(0)+'\u4e07':b.depositAvg.toFixed(0))+'</td></tr>';
-        tip+='<tr><td>\u65f6\u70b9\u5b58\u6b3e</td><td class="vl" style="color:#2b7a78">'+(b.depositSpot>=10000?(b.depositSpot/10000).toFixed(0)+'\u4e07':b.depositSpot.toFixed(0))+'</td></tr>';
-        tip+='<tr><td>\u6388\u4fe1\u4f59\u989d</td><td class="vl" style="color:#d9534f">'+(b.loanBalance>=10000?(b.loanBalance/10000).toFixed(0)+'\u4e07':b.loanBalance.toFixed(0))+'</td></tr>';
-        tip+='<tr><td>\u5e74\u5316\u6536\u5165</td><td class="vl">'+(b.netIncome12m>=10000?(b.netIncome12m/10000).toFixed(0)+'\u4e07':b.netIncome12m.toFixed(0))+'</td></tr></table>';
+        tip+='<hr class="thr"><div style="font-size:14px;font-weight:bold">🏦 交行 开户'+b.openDate+'</div><table>';
+        tip+='<tr><td>日均存款</td><td class="vl" style="color:#2b7a78">'+(b.depositAvg>=10000?(b.depositAvg/10000).toFixed(0)+'万':b.depositAvg.toFixed(0))+'</td></tr>';
+        tip+='<tr><td>时点存款</td><td class="vl" style="color:#2b7a78">'+(b.depositSpot>=10000?(b.depositSpot/10000).toFixed(0)+'万':b.depositSpot.toFixed(0))+'</td></tr>';
+        tip+='<tr><td>授信余额</td><td class="vl" style="color:#d9534f">'+(b.loanBalance>=10000?(b.loanBalance/10000).toFixed(0)+'万':b.loanBalance.toFixed(0))+'</td></tr>';
+        tip+='<tr><td>年化收入</td><td class="vl">'+(b.netIncome12m>=10000?(b.netIncome12m/10000).toFixed(0)+'万':b.netIncome12m.toFixed(0))+'</td></tr>';
+        if(b.payrollCount) tip+='<tr><td>代发个人客户</td><td class="vl">'+b.payrollCount+'人</td></tr>';
+        if(b.payrollAmount) tip+='<tr><td>发薪量</td><td class="vl">'+(b.payrollAmount>=10000?(b.payrollAmount/10000).toFixed(0)+'万':b.payrollAmount.toFixed(0))+'</td></tr>';
+        if(b.pensionCardCount) tip+='<tr><td>养老金发卡</td><td class="vl">'+b.pensionCardCount+'张</td></tr>';
+        tip+='</table>';
       }
       document.getElementById("tip").innerHTML=tip;document.getElementById("tip").style.opacity="1"
     })
@@ -45,24 +107,39 @@ function upd(){
     .each(function(d){
       var me=d3.select(this),len=d.data.name.length,w=Math.max(len*14+16,80);
       me.selectAll("*").remove();
-      if(isVertical){
-        var vh=Math.max(len*16+12,30),vw=22;
+      if(d.depth >= 2){
+        var maxCharsPerCol = 10;
+        var numCols = len > maxCharsPerCol ? 2 : 1;
+        var vw = numCols * 22 + (numCols-1) * 2;
+        var vh = SETTINGS.vertNodeH;
         me.append("rect").attr("x",-vw/2).attr("y",-vh/2).attr("width",vw).attr("height",vh)
           .attr("fill",d.data._biz?"#2b7a78":DC[Math.min(d.depth,5)])
           .attr("stroke",d3.color(DC[Math.min(d.depth,5)]).darker(0.3)).attr("stroke-width",1.5);
         var txt=me.append("text").attr("text-anchor","middle").attr("font-size","13px");
-        var chars = (len>10?d.data.name.slice(0,10)+"\u2026":d.data.name).split("");
-        var startY = -(chars.length/2)*16 + 8;
-        chars.forEach(function(ch,i){txt.append("tspan").attr("x",0).attr("dy",i===0?startY+"px":"16px").text(ch);});
+        if(numCols === 2){
+          var col1 = chars.slice(0, maxCharsPerCol);
+          var col2 = chars.slice(maxCharsPerCol);
+          var colH = Math.max(col1.length, col2.length);
+          var startY = -(colH/2)*16 + 8;
+          var colOffset = 11;
+          var txt1 = me.append("text").attr("text-anchor","middle").attr("font-size","13px");
+          var txt2 = me.append("text").attr("text-anchor","middle").attr("font-size","13px");
+          col1.forEach(function(ch,i){txt1.append("tspan").attr("x",-colOffset).attr("dy",i===0?startY+"px":"16px").text(ch);});
+          col2.forEach(function(ch,i){txt2.append("tspan").attr("x",colOffset).attr("dy",i===0?startY+"px":"16px").text(ch);});
+        }else{
+          var startY = -(chars.length/2)*16 + 8;
+          chars.forEach(function(ch,i){txt.append("tspan").attr("x",0).attr("dy",i===0?startY+"px":"16px").text(ch);});
+        }
         var hk=d.children||d._children;if(hk)me.append("text").attr("fill","#656d76")
           .attr("x",0).attr("y",vh/2+2).attr("font-size","10px").attr("text-anchor","middle").attr("dominant-baseline","central").text(d.children?"\u25bc":"\u25b6");
       }else{
-        me.append("rect").attr("x",-w/2).attr("y",-18).attr("width",w).attr("height",36)
+        var hw = SETTINGS.horzNodeW;
+        me.append("rect").attr("x",-hw/2).attr("y",-18).attr("width",hw).attr("height",36)
           .attr("fill",d.data._biz?"#2b7a78":DC[Math.min(d.depth,5)])
           .attr("stroke",d3.color(DC[Math.min(d.depth,5)]).darker(0.3)).attr("stroke-width",1.5);
         me.append("text").attr("y",0).text(len>18?d.data.name.slice(0,16)+"\u2026":d.data.name);
         var hk=d.children||d._children;if(hk)me.append("text").attr("fill","#656d76")
-          .attr("x",w/2+8).attr("y",0).attr("font-size","10px").attr("text-anchor","start").attr("dominant-baseline","central").text(d.children?"\u25bc":"\u25b6");
+          .attr("x",hw/2+8).attr("y",0).attr("font-size","10px").attr("text-anchor","start").attr("dominant-baseline","central").text(d.children?"\u25bc":"\u25b6");
       }
     })
     updateStats();
@@ -74,9 +151,11 @@ function updateStats(){
     return r;
   }
   function sumBiz(n){
-    var s={spot:0,avg:0,loan:0,inc:0};
-    if(n._biz){s.spot+=n._biz.depositSpot||0;s.avg+=n._biz.depositAvg||0;s.loan+=n._biz.loanBalance||0;s.inc+=n._biz.netIncome12m||0;}
-    if(n.children)n.children.forEach(function(c){var cs=sumBiz(c);s.spot+=cs.spot;s.avg+=cs.avg;s.loan+=cs.loan;s.inc+=cs.inc;});
+    var s={spot:0,avg:0,loan:0,inc:0,payrollCount:0,payrollAmount:0,pensionCardCount:0};
+    if(n._biz){s.spot+=n._biz.depositSpot||0;s.avg+=n._biz.depositAvg||0;s.loan+=n._biz.loanBalance||0;s.inc+=n._biz.netIncome12m||0;
+      s.payrollCount+=n._biz.payrollCount||0;s.payrollAmount+=n._biz.payrollAmount||0;s.pensionCardCount+=n._biz.pensionCardCount||0;}
+    if(n.children)n.children.forEach(function(c){var cs=sumBiz(c);s.spot+=cs.spot;s.avg+=cs.avg;s.loan+=cs.loan;s.inc+=cs.inc;
+      s.payrollCount+=cs.payrollCount;s.payrollAmount+=cs.payrollAmount;s.pensionCardCount+=cs.pensionCardCount;});
     return s;
   }
   function fm(v){if(!v||v==0)return'-';var abs=Math.abs(v);var s=v<0?'-':'';if(abs>=100000000)return s+(abs/100000000).toFixed(2)+'亿';if(abs>=10000)return s+(abs/10000).toFixed(2)+'万';return s+abs.toFixed(0);}
@@ -87,14 +166,16 @@ function updateStats(){
   }
   h+='<tr class="tt"><td colspan="3">合计 '+TD.name+' 体系 '+(stats[0].t+Object.keys(stats).filter(function(k){return k!='0'}).reduce(function(s,k){return s+stats[k].t},0))+' 家</td></tr>';
   h+='<tr class="tb"><td colspan="3">🏦 我行客户 <span style="color:#2b7a78;font-weight:700;font-size:14px">'+bizCount+'</span> 家</td></tr>';
-  // Financial summary
   var fin=sumBiz(TD);
-  if(fin.avg>0||fin.spot>0||fin.loan>0||fin.inc>0){
+  if(fin.avg>0||fin.spot>0||fin.loan>0||fin.inc>0||fin.payrollCount>0||fin.payrollAmount>0||fin.pensionCardCount>0){
     h+='<tr class="tt"><td colspan="3">━━ 业务数据汇总 ━━</td></tr>';
     if(fin.avg>0) h+='<tr><td style="color:#5f6368;font-size:11px">日均存款</td><td colspan="2" style="text-align:right;font-weight:700;font-size:13px;color:#1a73e8">'+fm(fin.avg)+'</td></tr>';
     if(fin.spot>0) h+='<tr><td style="color:#5f6368;font-size:11px">时点存款</td><td colspan="2" style="text-align:right;font-weight:700;font-size:13px;color:#1a73e8">'+fm(fin.spot)+'</td></tr>';
     if(fin.loan>0) h+='<tr><td style="color:#5f6368;font-size:11px">授信余额</td><td colspan="2" style="text-align:right;font-weight:700;font-size:13px;color:#d93025">'+fm(fin.loan)+'</td></tr>';
     if(fin.inc>0) h+='<tr><td style="color:#5f6368;font-size:11px">年化收入</td><td colspan="2" style="text-align:right;font-weight:700;font-size:13px;color:#1e8e3e">'+fm(fin.inc)+'</td></tr>';
+    if(fin.payrollCount>0) h+='<tr><td style="color:#5f6368;font-size:11px">代发个人客户</td><td colspan="2" style="text-align:right;font-weight:700;font-size:13px;color:#1a73e8">'+fin.payrollCount+'人</td></tr>';
+    if(fin.payrollAmount>0) h+='<tr><td style="color:#5f6368;font-size:11px">发薪量</td><td colspan="2" style="text-align:right;font-weight:700;font-size:13px;color:#1a73e8">'+fm(fin.payrollAmount)+'</td></tr>';
+    if(fin.pensionCardCount>0) h+='<tr><td style="color:#5f6368;font-size:11px">养老金发卡</td><td colspan="2" style="text-align:right;font-weight:700;font-size:13px;color:#1a73e8">'+fin.pensionCardCount+'张</td></tr>';
   }
   document.getElementById("stbd").innerHTML=h;
 }
@@ -109,7 +190,6 @@ document.getElementById("col").onclick=function(){root.descendants().forEach(fun
 document.getElementById("rst").onclick=function(){document.getElementById("pf").value=0;document.getElementById("pctInput").value=0;document.getElementById("pv").textContent="0%";if(showBizOnly){showBizOnly=false;var b=document.getElementById("bizToggle");b.style.background="#2b7a78";b.style.color="#fff";b.style.borderColor="#2b7a78";b.textContent="\U0001f3e6 \u4ec5\u663e\u6211\u884c\u5ba2\u6237 ("+bizCount+"\u5bb6)"}af(0);svg.transition().duration(500).call(zoom.transform,it)};
 function smartPrint(noWatermark){
   if(noWatermark){var pwd=prompt("请输入密码");if(pwd!=="lht2026"){alert("密码错误");return;}}
-  // Save expand state + current zoom
   var se=new Set();
   root.descendants().forEach(function(d){if(d._children){se.add(d.data.name);d.children=d._children;d._children=null}});
   upd();
@@ -124,8 +204,6 @@ function smartPrint(noWatermark){
   var tw=Math.ceil((mxX-mnX)*zs+400), th=Math.ceil((mxY-mnY)*zs+300);
   var cols=Math.ceil(tw/960), rows=Math.ceil(th/640);
   document.getElementById("nc").textContent=ns.length+"节点 · "+ (cols*rows)+"页 ("+cols+"×"+rows+")";
-  
-  // Create a wrapper div sized to hold the FULL tree at current zoom
   var wrap=document.createElement("div");
   wrap.id="print-wrap";
   wrap.style.width=tw+"px";
@@ -134,8 +212,6 @@ function smartPrint(noWatermark){
   wrap.style.position="relative";
   wrap.style.margin="0";
   wrap.style.padding="0";
-  
-  // Move SVG into wrapper
   svgEl.style.position="absolute";
   svgEl.style.top="0";
   svgEl.style.left="0";
@@ -143,35 +219,23 @@ function smartPrint(noWatermark){
   svgEl.style.height=th+"px";
   svgEl.setAttribute("width",tw);
   svgEl.setAttribute("height",th);
-  
-  // Position tree content inside SVG
   var tx=-mnX*zs+40, ty=-mnY*zs+30;
   g.attr("transform","translate("+tx+","+ty+")scale("+zs+")");
-  
-  // Insert wrapper before SVG in DOM, move SVG inside
   svgEl.parentNode.insertBefore(wrap, svgEl);
   wrap.appendChild(svgEl);
-  
-  // Temporarily hide bar/legend/stats
   document.getElementById("bar").style.display="none";
   document.getElementById("legend").style.display="none";
   var statsEl=document.getElementById("stats");
   if(statsEl)statsEl.style.display="none";
-  
   if(noWatermark) document.getElementById("watermark").classList.add("hide-print");
-  
   setTimeout(function(){
     window.print();
-    // Restore everything
     document.getElementById("watermark").classList.remove("hide-print");
     document.getElementById("bar").style.display="";
     document.getElementById("legend").style.display="";
     if(statsEl)statsEl.style.display="";
-    
-    // Move SVG back
     wrap.parentNode.insertBefore(svgEl, wrap);
     wrap.remove();
-    
     svgEl.style.position="fixed";
     svgEl.style.top="46px";
     svgEl.style.left="0";
@@ -179,7 +243,6 @@ function smartPrint(noWatermark){
     svgEl.style.height="calc(100vh - 80px)";
     svgEl.removeAttribute("width");
     svgEl.removeAttribute("height");
-    
     document.getElementById("nc").textContent=ns.length+"节点";
     root.descendants().forEach(function(d){if(se.has(d.data.name)&&d.children){d._children=d.children;d.children=null}});
     upd();
@@ -189,7 +252,43 @@ function smartPrint(noWatermark){
 }
 document.getElementById("printBtn").onclick=function(){smartPrint(false)};
 document.getElementById("printNoWmBtn").onclick=function(){smartPrint(true)};
-document.getElementById("layoutToggle").onclick=function(){isVertical=!isVertical;var btn=document.getElementById("layoutToggle");if(isVertical){btn.textContent="📐 横版排列";btn.style.background="#fff";btn.style.color="#6f42c1"}else{btn.textContent="📐 竖版排列";btn.style.background="#6f42c1";btn.style.color="#fff"}upd();setTimeout(function(){var cw=svgEl.clientWidth,ch=svgEl.clientHeight;var s=Math.min(0.9,cw/(root.x*2||1)*0.8);svg.call(zoom.transform,d3.zoomIdentity.translate(cw/2-root.x*s,60).scale(s))},50)};
+
+// --- Settings Panel ---
+document.getElementById("setBtn").onclick=function(){
+  var p=document.getElementById("setPanel");
+  p.style.display=p.style.display==="block"?"none":"block";
+};
+document.getElementById("setClose").onclick=function(){document.getElementById("setPanel").style.display="none";};
+
+// Drag settings panel
+(function(){
+  var panel=document.getElementById("setPanel");
+  var header=document.getElementById("setHeader");
+  var ox=0,oy=0,dx=0,dy=0;
+  header.onmousedown=function(e){
+    ox=e.clientX;oy=e.clientY;
+    document.onmousemove=function(ev){
+      dx=ev.clientX-ox;dy=ev.clientY-oy;
+      ox=ev.clientX;oy=ev.clientY;
+      panel.style.left=(panel.offsetLeft+dx)+"px";
+      panel.style.top=(panel.offsetTop+dy)+"px";
+    };
+    document.onmouseup=function(){document.onmousemove=null;document.onmouseup=null;};
+  };
+})();
+
+function applySetting(key, val){
+  SETTINGS[key]=val;
+  // Update tree layout with new settings
+  tl = d3.tree().size([2400,50000]).nodeSize([SETTINGS.foldedSpacing, SETTINGS.vertSpacing]).separation(function(a,b){return a.parent===b.parent?1.3:2});
+  // Re-layout existing root (preserves expand/collapse state)
+  tl(root);
+  var c=cn(TD);is=Math.min(1.2,900/(c||1)+0.3);
+  upd();
+  document.getElementById("nc").textContent=c;
+  var cx=svgEl.clientWidth/2;
+  svg.call(zoom.transform,d3.zoomIdentity.translate(cx-root.x*is,60).scale(is));
+}
 
 // Search with arrow navigation
 var srchMatches=[],srchIdx=-1;
@@ -200,7 +299,7 @@ document.getElementById("srch").addEventListener("input",function(){
   srchMatches=[];srchIdx=-1;
   if(q){
     allN(root).forEach(function(d){if(fuzzy(d.data.name.toLowerCase(),q))srchMatches.push(d)});
-    document.getElementById("pc").textContent=srchMatches.length+"\u6761\u5339\u914d";
+    document.getElementById("pc").textContent=srchMatches.length+"条匹配";
     srchIdx=-1;goSrchMatch(1);
   }else{document.getElementById("pc").textContent="";upd()}
   g.selectAll(".node").each(function(d){
@@ -215,7 +314,7 @@ function goSrchMatch(dir){
   if(!srchMatches.length)return;
   srchIdx=(srchIdx+dir+srchMatches.length)%srchMatches.length;
   var d=srchMatches[srchIdx];
-  document.getElementById("pc").textContent=(srchIdx+1)+"/"+srchMatches.length+"\u6761\u5339\u914d";
+  document.getElementById("pc").textContent=(srchIdx+1)+"/"+srchMatches.length+"条匹配";
   var p=d.parent;while(p){if(p._children&&!p.children){p.children=p._children;p._children=null}p=p.parent}upd();
   svg.transition().duration(400).call(zoom.transform,d3.zoomIdentity.translate(svgEl.clientWidth/2-d.x,200-d.y).scale(1.3));
 }
@@ -239,10 +338,9 @@ function af(th){
   root.descendants().forEach(function(d){if(d.depth>=1){d._children=d.children;d.children=null}});
   root.descendants().forEach(function(d){if(d.depth>=1&&se.has(d.data.name)&&d._children){d.children=d._children;d._children=null}});
   var c=cn(TD);is=Math.min(1.2,900/(c||1)+0.3);upd();
-  document.getElementById("nc").textContent=c;document.getElementById("pc").textContent=th>0?"\uff08\u7b5b\u9009\u540e"+c+"\u8282\u70b9\uff09":"";
+  document.getElementById("nc").textContent=c;document.getElementById("pc").textContent=th>0?"（筛选后"+c+"节点）":"";
   var cx=svgEl.clientWidth/2;svg.call(zoom.transform,d3.zoomIdentity.translate(cx-root.x*is,60).scale(is))
 }
-// Slider + number input sync
 function syncPct(v){document.getElementById("pv").textContent=v+"%";document.getElementById("pf").value=v;document.getElementById("pctInput").value=v;if(ft)clearTimeout(ft);ft=setTimeout(function(){af(v)},150)}
 document.getElementById("pf").addEventListener("input",function(){syncPct(parseInt(this.value))});
 document.getElementById("pctInput").addEventListener("input",function(){var v=parseInt(this.value);if(v<0)v=0;if(v>100)v=100;if(!isNaN(v))syncPct(v)});
@@ -250,7 +348,6 @@ document.getElementById("pctInput").addEventListener("input",function(){var v=pa
 // Business customer toggle
 var showBizOnly = false;
 var bizCount = 0;
-// Count bank customers
 (function countBiz(n){if(n._biz)bizCount++;if(n.children)n.children.forEach(function(c){countBiz(c)})})(FT);
 document.getElementById("bizToggle").onclick = function() {
   showBizOnly = !showBizOnly;
@@ -259,31 +356,20 @@ document.getElementById("bizToggle").onclick = function() {
     btn.style.background = "#fff";
     btn.style.color = "#2b7a78";
     btn.style.borderColor = "#2b7a78";
-    btn.textContent = "🏦 \u663e\u793a\u5168\u90e8 (" + bizCount + "\u5bb6)";
+    btn.textContent = "\U0001f3e6 \u663e\u793a\u5168\u90e8 (" + bizCount + "\u5bb6)";
   } else {
     btn.style.background = "#2b7a78";
     btn.style.color = "#fff";
     btn.style.borderColor = "#2b7a78";
-    btn.textContent = "🏦 仅显我行客户 (" + bizCount + "\u5bb6)";
+    btn.textContent = "\U0001f3e6 \u4ec5\u663e\u6211\u884c\u5ba2\u6237 (" + bizCount + "\u5bb6)";
   }
-  
-  // Save expand state
   var se = new Set();
   if (root) root.descendants().forEach(function(d){if(d.children&&d.depth>=1)se.add(d.data.name)});
-  
-  // Filter data: keep only nodes with _biz, or all
-  if (showBizOnly) {
-    TD = filterBiz(FT);
-  } else {
-    TD = JSON.parse(JSON.stringify(FT));
-  }
-  
-  // Rebuild hierarchy
+  if (showBizOnly) {TD = filterBiz(FT);} else {TD = JSON.parse(JSON.stringify(FT));}
   root = d3.hierarchy(TD);
   tl(root);
   root.descendants().forEach(function(d){if(d.depth>=1){d._children=d.children;d.children=null}});
   root.descendants().forEach(function(d){if(d.depth>=1&&se.has(d.data.name)&&d._children){d.children=d._children;d._children=null}});
-  
   var c = cn(TD);
   is = Math.min(1.2, 900/(c||1)+0.3);
   upd();
@@ -294,7 +380,6 @@ document.getElementById("bizToggle").onclick = function() {
 };
 
 function filterBiz(node) {
-  /* Return tree containing ONLY nodes that have _biz (bank customers) or are direct path to them */
   if (!node) return null;
   var hasBiz = node._biz ? true : false;
   var keptChildren = [];
@@ -313,7 +398,6 @@ function filterBiz(node) {
   return null;
 }
 
-// Generate watermark filling the page
 (function(){
   var txt="copyright lht · copyright lht · copyright lht · copyright lht · copyright lht · copyright lht · copyright lht · copyright lht";
   function fillWM(){
