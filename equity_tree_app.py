@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """
 股权架构树桌面应用 — pywebview 原生窗口
-导入Excel数据 → 软件内直接渲染D3股权树 → 节点可拖拽
+导入Excel数据 → 软件内直接渲染D3股权树 → 节点可拖拽（父节点带动子节点）
 """
 import webview
-import json, os, sys, re, threading, base64
+import json, os, sys, re, threading
 
 TEMPLATE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'templates')
 if hasattr(sys, '_MEIPASS'):
@@ -312,10 +312,11 @@ def clean_status(tree):
     walk(tree)
     return removed
 
-# ── HTML 生成（嵌入 webview） ──
 
-def generate_html_content(tree, title):
-    """生成完整HTML内容（供webview直接加载）"""
+# ── HTML 生成 ──
+
+def generate_full_html(tree, title):
+    """生成完整HTML（head + data + tail）"""
     tree_json = json.dumps(tree, ensure_ascii=False, separators=(',', ':'))
     total = count_nodes(tree)
 
@@ -331,10 +332,10 @@ def generate_html_content(tree, title):
         head = head.replace('>1372<', f'>{total}<')
         html = head + 'var TD=' + tree_json + ';' + tail_
     else:
-        html = _generate_minimal_html(tree_json, title, total)
+        html = _minimal_html(tree_json, title, total)
     return html
 
-def _generate_minimal_html(tree_json, title, total):
+def _minimal_html(tree_json, title, total):
     return f'''<!DOCTYPE html>
 <html lang="zh"><head><meta charset="UTF-8"><title>{title}</title>
 <style>
@@ -370,8 +371,11 @@ function upd(){{
   g.selectAll(".link").data(ls,d=>d.target.data.name).join("path").attr("class","link")
     .attr("d",d=>"M"+d.source.x+","+(d.source.y+22)+"C"+d.source.x+","+((d.source.y+d.target.y)/2)+" "+d.target.x+","+((d.source.y+d.target.y)/2)+" "+d.target.x+","+(d.target.y-22));
   g.selectAll(".node").data(ns,d=>d.data.name).join("g").attr("class","node")
-    .attr("transform",d=>"translate("+d.x+","+d.y+")").style("cursor","pointer")
+    .attr("transform",d=>"translate("+d.x+","+d.y+")").style("cursor","grab")
     .on("click",function(ev,d){{ev.stopPropagation();if(d.children){{d._children=d.children;d.children=null}}else if(d._children){{d.children=d._children;d._children=null}}upd()}})
+    .call(d3.drag().on("start",function(ev,d){{ev.sourceEvent.stopPropagation();d3.select(this).style("cursor","grabbing");d._sx=d.x;d._sy=d.y}})
+      .on("drag",function(ev,d){{var dx=ev.x-d._sx,dy=ev.y-d._sy;d._sx=ev.x;d._sy=ev.y;d.x=ev.x;d.y=ev.y;d3.select(this).attr("transform","translate("+d.x+","+d.y+")");d.descendants().forEach(function(c){{if(c!==d){{c.x+=dx;c.y+=dy;c._sx=(c._sx||c.x)+dx;c._sy=(c._sy||c.y)+dy}}}});updLinks()}})
+      .on("end",function(ev,d){{d3.select(this).style("cursor","grab")}}))
     .each(function(d){{
       var me=d3.select(this),len=d.data.name.length,w=Math.max(len*14+16,80);
       me.selectAll("*").remove();
@@ -382,46 +386,63 @@ function upd(){{
       var hk=d.children||d._children;if(hk)me.append("text").attr("x",w/2+8).attr("y",0).attr("font-size","10px").text(d.children?"\\u25bc":"\\u25b6");
     }})
 }}upd();
+function updLinks(){{var ls=root.links();g.selectAll(".link").data(ls,d=>d.target.data.name).join("path").attr("class","link").attr("d",d=>"M"+d.source.x+","+(d.source.y+22)+"C"+d.source.x+","+((d.source.y+d.target.y)/2)+" "+d.target.x+","+((d.source.y+d.target.y)/2)+" "+d.target.x+","+(d.target.y-22));}}
 </script></body></html>'''
 
-# ── 数据加载线程 ──
 
-class DataLoader:
-    """在后台线程中加载数据，完成后通知webview"""
-    def __init__(self, window):
-        self.window = window
-        self.tree = None
-        self.title = "股权关系树"
+# ── API（JS 可调用） ──
 
-    def load(self, data_path, biz_path, root_name, mode, clean_status_flag):
+class Api:
+    def __init__(self, app):
+        self.app = app
+
+    def open_file_dialog(self):
+        result = webview.windows[0].create_file_dialog(
+            webview.OPEN_DIALOG, allow_multiple=False,
+            file_types=('Excel文件 (*.xlsx;*.xls)', '所有文件 (*.*)')
+        )
+        if result:
+            return result[0]
+        return ''
+
+    def open_biz_dialog(self):
+        result = webview.windows[0].create_file_dialog(
+            webview.OPEN_DIALOG, allow_multiple=False,
+            file_types=('Excel文件 (*.xlsx;*.xls)', '所有文件 (*.*)')
+        )
+        if result:
+            return result[0]
+        return ''
+
+    def load_data(self, data_path, biz_path, root_name, mode, clean_status_flag):
+        """在后台线程加载数据，完成后通过JS回调更新页面"""
         def _load():
             try:
+                webview.windows[0].evaluate_js('document.getElementById("statusBar").textContent="⏳ 正在加载数据...";')
+
                 sheets = load_xlsx(data_path)
-                sheet_names = list(sheets.keys())
-                # Pick the first sheet with enough rows
                 data_rows = None
-                for sn in sheet_names:
+                for sn in list(sheets.keys()):
                     if len(sheets[sn]) >= 3:
                         data_rows = sheets[sn]
                         break
                 if not data_rows:
-                    self.window.evaluate_js(f'alert("未找到有效数据")')
+                    webview.windows[0].evaluate_js('alert("未找到有效数据");document.getElementById("statusBar").textContent="❌ 加载失败";')
                     return
 
                 rows = parse_sheet(data_rows)
                 if not rows:
-                    self.window.evaluate_js(f'alert("未能解析数据")')
+                    webview.windows[0].evaluate_js('alert("未能解析数据");document.getElementById("statusBar").textContent="❌ 解析失败";')
                     return
 
                 tree = build_tree(rows, root_name, mode)
                 tree = clean_tree(tree)
 
-                if clean_status_flag:
+                if clean_status_flag == 'true' or clean_status_flag == True:
                     removed = clean_status(tree)
                     if removed:
                         print(f"已剔除 {len(removed)} 个异常状态节点")
 
-                # Load biz data
                 biz_count = 0
                 if biz_path:
                     biz_sheets = load_xlsx(biz_path)
@@ -431,101 +452,28 @@ class DataLoader:
                             break
 
                 total = count_nodes(tree)
-                self.tree = tree
-                self.title = f"股权关系树 ({total}节点)"
+                title = f"股权关系树 ({total}节点)"
 
                 # Generate HTML and load into webview
-                html = generate_html_content(tree, self.title)
-                self.window.load_html(html)
+                html = generate_full_html(tree, title)
+                webview.windows[0].load_html(html)
 
             except Exception as e:
                 import traceback
                 traceback.print_exc()
-                self.window.evaluate_js(f'alert("加载失败: {str(e).replace(chr(34),chr(39))}")')
+                err = str(e).replace('"', "'").replace('\n', ' ')
+                webview.windows[0].evaluate_js(f'alert("加载失败: {err}");document.getElementById("statusBar").textContent="❌ 加载失败";')
 
         threading.Thread(target=_load, daemon=True).start()
+        return 'loading'
 
 
-# ── 文件选择对话框（通过webview的JS调用） ──
+# ── 启动页 HTML（含完整工具栏） ──
 
-class Api:
-    def __init__(self, app):
-        self.app = app
-        self.data_path = None
-        self.biz_path = None
-
-    def open_file_dialog(self):
-        """打开文件选择对话框"""
-        result = webview.windows[0].create_file_dialog(
-            webview.OPEN_DIALOG,
-            allow_multiple=False,
-            file_types=('Excel文件 (*.xlsx;*.xls)', '所有文件 (*.*)')
-        )
-        if result:
-            self.data_path = result[0]
-            return self.data_path
-        return None
-
-    def open_biz_dialog(self):
-        result = webview.windows[0].create_file_dialog(
-            webview.OPEN_DIALOG,
-            allow_multiple=False,
-            file_types=('Excel文件 (*.xlsx;*.xls)', '所有文件 (*.*)')
-        )
-        if result:
-            self.biz_path = result[0]
-            return self.biz_path
-        return None
-
-    def load_data(self, data_path, biz_path, root_name, mode, clean_status):
-        self.app.loader.load(data_path, biz_path, root_name, mode, clean_status)
-        return "loading"
-
-    def export_html(self):
-        """导出当前树为HTML文件"""
-        if not self.app.loader.tree:
-            return "no_data"
-        result = webview.windows[0].create_file_dialog(
-            webview.SAVE_DIALOG,
-            save_filename='股权关系树.html',
-            file_types=('HTML文件 (*.html)',)
-        )
-        if result:
-            path = result
-            html = generate_html_content(self.app.loader.tree, self.app.loader.title)
-            with open(path, 'w', encoding='utf-8') as f:
-                f.write(html)
-            return f"已导出: {path}"
-        return "cancelled"
-
-
-# ── 主窗口 ──
-
-class EquityTreeDesktopApp:
-    def __init__(self):
-        self.window = None
-        self.loader = None
-
-    def run(self):
-        # Create window first, then set up loader
-        api = Api(self)
-        self.window = webview.create_window(
-            title='股权架构树生成器',
-            width=1400,
-            height=900,
-            resizable=True,
-            js_api=api,
-            # Start with a landing page
-            html=self._landing_html(),
-        )
-        self.loader = DataLoader(self.window)
-        api.app = self
-        webview.start(debug=True, http_server=True)
-
-    def _landing_html(self):
-        return '''<!DOCTYPE html>
+def landing_html():
+    return '''<!DOCTYPE html>
 <html lang="zh">
-<head><meta charset="UTF-8"><title>股权架构树生成器</title>
+<head><meta charset="UTF-8"><title>股权架构树桌面版</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:-apple-system,"Microsoft YaHei",sans-serif;background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);height:100vh;display:flex;align-items:center;justify-content:center;color:#fff}
@@ -536,54 +484,53 @@ body{font-family:-apple-system,"Microsoft YaHei",sans-serif;background:linear-gr
 .btn:hover{background:#0550ae;transform:translateY(-1px)}
 .btn.green{background:#2b7a78}
 .btn.green:hover{background:#1e5f5d}
-.btn.outline{background:transparent;border:2px solid #0969da;color:#0969da}
-.btn.outline:hover{background:#0969da;color:#fff}
 .info{font-size:12px;color:#8b949e;margin-top:20px}
+#statusBar{margin-top:16px;font-size:13px;color:#656d76;min-height:20px}
 </style>
 </head>
 <body>
 <div class="card">
-<h1>🏢 股权架构树生成器</h1>
-<p>导入Excel股东数据 → 自动生成交互式股权架构树<br>节点可拖拽 · 搜索 · 筛选 · 导出</p>
+<h1>🏢 股权架构树桌面版</h1>
+<p>导入Excel股东数据 → 自动生成交互式股权架构树<br>节点可拖拽 · 父节点拖动带动子节点 · 搜索 · 筛选 · 打印</p>
 <button class="btn" onclick="loadData()">📂 选择数据文件</button>
-<button class="btn green" onclick="exportHtml()">💾 导出HTML</button>
-<div id="status" style="margin-top:16px;font-size:13px;color:#656d76"></div>
+<div id="statusBar"></div>
 <div class="info">支持 .xlsx / .xls 格式 · 需含企业名称和上级企业列</div>
 </div>
 <script>
-var dataPath = null, bizPath = null;
+var dataPath = '', bizPath = '';
 
 async function loadData() {
   var path = await pywebview.api.open_file_dialog();
   if (!path) return;
   dataPath = path;
-  document.getElementById('status').textContent = '已选择: ' + path.split('/').pop();
+  document.getElementById('statusBar').textContent = '已选择: ' + path.split('/').pop();
 
-  // Ask for biz data (optional)
   var hasBiz = confirm('是否加载交行客户数据？（取消可跳过）');
   if (hasBiz) {
     bizPath = await pywebview.api.open_biz_dialog();
-    if (bizPath) document.getElementById('status').textContent += ' + 客户数据';
+    if (bizPath) document.getElementById('statusBar').textContent += ' + 客户数据';
   }
 
-  // Ask for root name (optional)
   var rootName = prompt('指定根节点企业名称（留空自动识别）:', '');
   var mode = confirm('确定=投资穿透树，取消=控制权树') ? 'invest' : 'control';
   var cleanStatus = confirm('是否剔除已注销/吊销的异常状态节点？') ? true : false;
 
-  document.getElementById('status').textContent = '⏳ 正在加载数据...';
+  document.getElementById('statusBar').textContent = '⏳ 正在加载数据...';
   pywebview.api.load_data(dataPath, bizPath||'', rootName||'', mode, cleanStatus);
-}
-
-async function exportHtml() {
-  var result = await pywebview.api.export_html();
-  document.getElementById('status').textContent = result;
 }
 </script>
 </body>
 </html>'''
 
 
+# ── 启动 ──
+
 if __name__ == '__main__':
-    app = EquityTreeDesktopApp()
-    app.run()
+    window = webview.create_window(
+        title='股权架构树桌面版',
+        width=1400, height=900,
+        resizable=True,
+        js_api=Api(None),
+        html=landing_html(),
+    )
+    webview.start(debug=True, http_server=True)

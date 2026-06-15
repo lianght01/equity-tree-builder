@@ -99,8 +99,16 @@ function upd(){
   g.selectAll(".node").data(ns,function(d){return d.data.name}).join("g").attr("class","node")
     .attr("transform",function(d){return"translate("+d.x+","+d.y+")"}).style("cursor","grab")
     .on("click",function(ev,d){ev.stopPropagation();if(d.children){d._children=d.children;d.children=null}else if(d._children){d.children=d._children;d._children=null}upd()})
-    .call(d3.drag().on("start",function(ev,d){ev.sourceEvent.stopPropagation();d3.select(this).style("cursor","grabbing");d._dx=d.x;d._dy=d.y})
-      .on("drag",function(ev,d){d.x=ev.x;d.y=ev.y;d3.select(this).attr("transform","translate("+d.x+","+d.y+")");updLinks()})
+    .call(d3.drag().on("start",function(ev,d){ev.sourceEvent.stopPropagation();d3.select(this).style("cursor","grabbing");d._sx=d.x;d._sy=d.y})
+      .on("drag",function(ev,d){
+        var dx=ev.x-d._sx,dy=ev.y-d._sy;
+        d._sx=ev.x;d._sy=ev.y;
+        d.x=ev.x;d.y=ev.y;
+        d3.select(this).attr("transform","translate("+d.x+","+d.y+")");
+        // Move all descendants together
+        d.descendants().forEach(function(c){if(c!==d){c.x+=dx;c.y+=dy;c._sx=(c._sx||c.x)+dx;c._sy=(c._sy||c.y)+dy}});
+        updLinks();
+      })
       .on("end",function(ev,d){d3.select(this).style("cursor","grab")}))
     .on("mouseenter",function(ev,d){
       var k=d.children||d._children||[],pt=d.data._pt;
