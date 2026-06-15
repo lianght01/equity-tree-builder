@@ -1,0 +1,70 @@
+name: Build 股权树桌面版
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'equity_tree_app.py'
+      - 'templates/**'
+      - '.github/workflows/build.yml'
+  workflow_dispatch:
+
+jobs:
+  build-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyinstaller pywebview openpyxl
+      - name: Build .app
+        run: |
+          pyinstaller --onefile --windowed \
+            --name "股权树桌面版" \
+            --add-data "templates:templates" \
+            equity_tree_app.py
+      - name: Package zip
+        run: |
+          cd dist
+          zip -r "股权树桌面版_macOS_arm64.zip" "股权树桌面版.app"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: 股权树桌面版-macOS
+          path: dist/股权树桌面版_macOS_arm64.zip
+
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyinstaller pywebview openpyxl
+      - name: Build .exe
+        run: |
+          pyinstaller --onefile --windowed `
+            --name "股权树桌面版" `
+            --add-data "templates;templates" `
+            --icon icon.ico `
+            equity_tree_app.py
+        continue-on-error: true
+      - name: Build .exe (no icon fallback)
+        run: |
+          pyinstaller --onefile --windowed `
+            --name "股权树桌面版" `
+            --add-data "templates;templates" `
+            equity_tree_app.py
+      - name: Package zip
+        run: |
+          Compress-Archive -Path "dist/股权树桌面版.exe" -DestinationPath "股权树桌面版_Windows_x64.zip" -Force
+      - uses: actions/upload-artifact@v4
+        with:
+          name: 股权树桌面版-Windows
+          path: 股权树桌面版_Windows_x64.zip
