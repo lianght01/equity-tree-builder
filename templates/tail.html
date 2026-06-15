@@ -109,7 +109,7 @@ function upd(){
     .on("mousemove",function(ev){var t=document.getElementById("tip");t.style.left=(ev.clientX+15)+"px";t.style.top=(ev.clientY-10)+"px"})
     .on("mouseleave",function(){document.getElementById("tip").style.opacity="0"})
     .each(function(d){
-      var me=d3.select(this),len=d.data.name.length,w=Math.max(len*14+16,80);
+      var me=d3.select(this),len=d.data.name.length,w=Math.max(len*14+16,80),chars=d.data.name.split("");
       me.selectAll("*").remove();
       if(d.depth >= 2){
         var maxCharsPerCol = 10;
