@@ -58,6 +58,10 @@ svg.call(zoom);
 var is=0.9,it=d3.zoomIdentity.translate(svgEl.clientWidth/2-root.x*is,60).scale(is);
 svg.call(zoom.transform,it);
 
+// Business customer count (must be before upd())
+var bizCount = 0;
+(function countBiz(n){if(n._biz)bizCount++;if(n.children)n.children.forEach(function(c){countBiz(c)})})(TD);
+
 function upd(){
   tl(root);
   var anyExpanded = false;
@@ -347,8 +351,6 @@ document.getElementById("pctInput").addEventListener("input",function(){var v=pa
 
 // Business customer toggle
 var showBizOnly = false;
-var bizCount = 0;
-(function countBiz(n){if(n._biz)bizCount++;if(n.children)n.children.forEach(function(c){countBiz(c)})})(FT);
 document.getElementById("bizToggle").onclick = function() {
   showBizOnly = !showBizOnly;
   var btn = document.getElementById("bizToggle");
