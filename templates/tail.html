@@ -191,7 +191,7 @@ document.getElementById("zin").onclick=function(){svg.transition().duration(300)
 document.getElementById("zout").onclick=function(){svg.transition().duration(300).call(zoom.scaleBy,0.7)};
 document.getElementById("exp").onclick=function(){root.descendants().forEach(function(d){if(d._children){d.children=d._children;d._children=null}});upd()};
 document.getElementById("col").onclick=function(){root.descendants().forEach(function(d){if(d.depth>=1&&d.children){d._children=d.children;d.children=null}});upd()};
-document.getElementById("rst").onclick=function(){document.getElementById("pf").value=0;document.getElementById("pctInput").value=0;document.getElementById("pv").textContent="0%";if(showBizOnly){showBizOnly=false;var b=document.getElementById("bizToggle");b.style.background="#2b7a78";b.style.color="#fff";b.style.borderColor="#2b7a78";b.textContent="\U0001f3e6 \u4ec5\u663e\u6211\u884c\u5ba2\u6237 ("+bizCount+"\u5bb6)"}af(0);svg.transition().duration(500).call(zoom.transform,it)};
+document.getElementById("rst").onclick=function(){document.getElementById("pf").value=0;document.getElementById("pctInput").value=0;document.getElementById("pv").textContent="0%";if(showBizOnly){showBizOnly=false;var b=document.getElementById("bizToggle");b.style.background="#2b7a78";b.style.color="#fff";b.style.borderColor="#2b7a78";b.textContent="\u{1f3e6} \u4ec5\u663e\u6211\u884c\u5ba2\u6237 ("+bizCount+"\u5bb6)"}af(0);svg.transition().duration(500).call(zoom.transform,it)};
 function smartPrint(noWatermark){
   if(noWatermark){var pwd=prompt("请输入密码");if(pwd!=="lht2026"){alert("密码错误");return;}}
   var se=new Set();
@@ -358,12 +358,12 @@ document.getElementById("bizToggle").onclick = function() {
     btn.style.background = "#fff";
     btn.style.color = "#2b7a78";
     btn.style.borderColor = "#2b7a78";
-    btn.textContent = "\U0001f3e6 \u663e\u793a\u5168\u90e8 (" + bizCount + "\u5bb6)";
+    btn.textContent = "\u{1f3e6} \u663e\u793a\u5168\u90e8 (" + bizCount + "\u5bb6)";
   } else {
     btn.style.background = "#2b7a78";
     btn.style.color = "#fff";
     btn.style.borderColor = "#2b7a78";
-    btn.textContent = "\U0001f3e6 \u4ec5\u663e\u6211\u884c\u5ba2\u6237 (" + bizCount + "\u5bb6)";
+    btn.textContent = "\u{1f3e6} \u4ec5\u663e\u6211\u884c\u5ba2\u6237 (" + bizCount + "\u5bb6)";
   }
   var se = new Set();
   if (root) root.descendants().forEach(function(d){if(d.children&&d.depth>=1)se.add(d.data.name)});
