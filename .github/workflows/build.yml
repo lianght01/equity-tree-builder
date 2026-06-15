@@ -5,8 +5,11 @@ on:
     branches: [ main ]
     paths:
       - 'equity_tree_app.py'
+      - 'equity_tree_gui.py'
       - 'templates/**'
       - '.github/workflows/build.yml'
+      - 'icon.ico'
+      - 'build_*'
   workflow_dispatch:
 
 jobs:
