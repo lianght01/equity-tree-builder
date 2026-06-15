@@ -7,10 +7,12 @@
 set -e
 cd "$(dirname "$0")"
 
-APP_NAME="股权树生成器"
-VERSION="1.0"
+APP_NAME="股权树桌面版"
+VERSION="2.0"
 
-echo "=== 股权树生成器 macOS 打包 ==="
+PYINSTALLER="/Users/prince/Library/Python/3.9/bin/pyinstaller"
+
+echo "=== 股权树桌面版 macOS 打包 ==="
 echo ""
 
 # 检测架构
@@ -27,14 +29,14 @@ fi
 rm -rf build dist *.spec
 
 echo "开始打包..."
-pyinstaller --onefile --windowed \
+$PYINSTALLER --onefile --windowed \
     --name "$APP_NAME" \
     --icon icon.icns \
     --add-data "templates:templates" \
     --distpath dist \
     --workpath build \
     --noconfirm \
-    equity_tree_gui.py
+    equity_tree_app.py
 
 echo ""
 echo "=== 打包完成 ==="
