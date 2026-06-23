@@ -326,19 +326,25 @@ def clean_status(tree):
 
 def generate_full_html(tree, title):
     """生成完整HTML（head + data + tail）"""
-    tree_json = json.dumps(tree, ensure_ascii=False, separators=(',', ':'))
+    tree_json = json.dumps(tree, ensure_ascii=False)
     total = count_nodes(tree)
-
+    
     head_path = os.path.join(TEMPLATE_DIR, 'head.html')
     tail_path = os.path.join(TEMPLATE_DIR, 'tail.html')
-
+    
     if os.path.exists(head_path) and os.path.exists(tail_path):
-        with open(head_path,'r',encoding='utf-8') as f: head = f.read()
-        with open(tail_path,'r',encoding='utf-8') as f: tail_ = f.read()
-        head = re.sub(r'<title>[^<]+</title>', f'<title>{title}</title>', head)
-        head = re.sub(r'鞍钢集团控股股权关系树', title, head)
-        head = head.replace('>1372节点<', f'>{total}节点<')
-        head = head.replace('>1372<', f'>{total}<')
+        with open(head_path, 'r', encoding='utf-8') as f:
+            head = f.read()
+        with open(tail_path, 'r', encoding='utf-8') as f:
+            tail_ = f.read()
+        # 在head的bar工具栏里插入导出按钮（在setBtn之后，</div>之前）
+        export_btn = '''<button id="exportBtn" onclick="exportHTML()" style="background:#28a745;color:#fff;border-color:#28a745" title="导出HTML文件到本地">📤 导出HTML</button>\n'''
+        # 在bizToggle按钮后插入（它是bar里最后一个button）
+        head = head.replace('仅显我行客户</button>', '仅显我行客户</button>' + export_btn) if 'id="bar"' in head else head
+        # 添加导出JS函数到tail</script>前
+        export_js = '''
+function exportHTML(){pywebview.api.export_html();}'''
+        tail_ = tail_.replace('</script>', export_js + '</script>', 1)
         html = head + 'var TD=' + tree_json + ';' + tail_
     else:
         html = _minimal_html(tree_json, title, total)
@@ -463,6 +469,10 @@ class Api:
                 total = count_nodes(tree)
                 title = f"股权关系树 ({total}节点)"
 
+                # 保存到内存，供导出用
+                self._current_tree = tree
+                self._current_title = title
+
                 # Generate HTML and load into webview
                 html = generate_full_html(tree, title)
                 webview.windows[0].load_html(html)
@@ -475,6 +485,34 @@ class Api:
 
         threading.Thread(target=_load, daemon=True).start()
         return 'loading'
+
+    def export_html(self):
+        """导出当前股权树为HTML文件"""
+        if not hasattr(self, '_current_tree') or not self._current_tree:
+            webview.windows[0].evaluate_js('alert("请先加载数据后导出");')
+            return ''
+
+        result = webview.windows[0].create_file_dialog(
+            webview.SAVE_DIALOG,
+            save_filename='股权关系树.html',
+            file_types=('HTML文件 (*.html)', '所有文件 (*.*)')
+        )
+        if not result:
+            return ''
+
+        def _save():
+            try:
+                html = generate_full_html(self._current_tree, self._current_title)
+                with open(result, 'w', encoding='utf-8') as f:
+                    f.write(html)
+                webview.windows[0].evaluate_js(
+                    f'document.getElementById("statusBar").textContent="✅ 已导出: {os.path.basename(result)}";'
+                )
+            except Exception as e:
+                webview.windows[0].evaluate_js(f'alert("导出失败: {str(e)}");')
+
+        threading.Thread(target=_save, daemon=True).start()
+        return result
 
 
 # ── 启动页 HTML（含完整工具栏） ──
